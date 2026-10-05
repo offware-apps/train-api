@@ -8,9 +8,15 @@ jobs:
   urls:
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          curl -sS "https://opendata.swiss/api/3/action/package_show?id=fahrplan-2026-gtfs2020" | jq '.result | {license_title, license_id, license_url, rights: [.resources[]?.rights] | unique, res_license: [.resources[]?.license] | unique}'
-          curl -sS "https://data.opentransportdata.swiss/api/3/action/package_show?id=timetable-2026-gtfs2020" | jq '.result | {license_title, license_id, license_url}' || true
-          curl -sSL -o fi.zip -w "fi %{http_code} %{size_download}\n" -H "Accept-Encoding: gzip" -H "Digitraffic-User: train-api" https://rata.digitraffic.fi/api/v1/trains/gtfs-passenger.zip; unzip -l fi.zip | tail -12
-          unzip -p fi.zip feed_info.txt agency.txt routes.txt 2>/dev/null | head -20
-          curl -sSL -o ie.zip https://www.transportforireland.ie/transitData/Data/GTFS_Irish_Rail.zip; unzip -p ie.zip feed_info.txt agency.txt; unzip -p ie.zip routes.txt | head -20; unzip -p ie.zip trips.txt | head -3
+      - shell: bash
+        run: |
+          set +e
+          echo "== swiss ckan"; curl -sS -m 30 "https://opendata.swiss/api/3/action/package_search?q=gtfs%20fahrplan&rows=3" | head -c 3000; echo
+          echo "== swiss terms"; curl -sSL -m 30 "https://opentransportdata.swiss/en/terms-of-use/" | sed 's/<[^>]*>/ /g' | tr -s ' \n' | grep -io '.\{0,200\}\(commercial\|licen[cs]e\|attribution\|free of charge\).\{0,200\}' | head -15
+          echo "== fi"; curl -sSL -m 120 -o fi.zip -w "fi %{http_code} %{size_download}\n" -H "Accept-Encoding: gzip" -H "Digitraffic-User: train-api/1.0" https://rata.digitraffic.fi/api/v1/trains/gtfs-passenger.zip; file fi.zip; unzip -l fi.zip | tail -12
+          unzip -p fi.zip agency.txt | head -5; unzip -p fi.zip routes.txt | head -15; unzip -p fi.zip trips.txt | head -4; unzip -p fi.zip stops.txt | head -4
+          echo "== fi licence"; curl -sSL -m 30 https://www.digitraffic.fi/en/terms-of-service/ | sed 's/<[^>]*>/ /g' | tr -s ' \n' | grep -io '.\{0,150\}\(CC BY\|licen[cs]e\|Creative Commons\).\{0,150\}' | head -6
+          echo "== ie"; curl -sSL -m 60 -o ie.zip -w "ie %{http_code} %{size_download}\n" https://www.transportforireland.ie/transitData/Data/GTFS_Irish_Rail.zip; unzip -l ie.zip | tail -12
+          unzip -p ie.zip feed_info.txt agency.txt; unzip -p ie.zip routes.txt | head -20; unzip -p ie.zip trips.txt | head -3; unzip -p ie.zip stops.txt | head -3
+          unzip -p ie.zip trips.txt | awk -F, 'NR>1{print $1}' | sort | uniq -c | sort -rn | head
+          true
