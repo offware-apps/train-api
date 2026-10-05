@@ -1,5 +1,7 @@
 # train-api
 
+> **Work in progress.** "train-api" is a placeholder name; the final name isn't chosen yet.
+
 Open train data for rail passes, starting with **Interrail** on SNCF. It is built on top
 of [MAX-Finder](https://github.com/offware-apps/MAX-Finder): the same SNCF open-data feed,
 without MAX-Finder's "free MAX seat only" filter, so every train an Interrail holder can
@@ -18,8 +20,8 @@ published as running, with the seat `unknown`.
 3. The **Publish API** workflow does both daily and deploys `public/` to GitHub Pages.
    There is no server and no cost.
 
-GitHub Pages on a private repository needs a paid GitHub plan. Without one, make the repo
-public or point the workflow at another free static host.
+Live at <https://offware-apps.github.io/train-api/v1/index.json> once Pages is on
+(Settings → Pages → Source: GitHub Actions).
 
 ## Develop
 
