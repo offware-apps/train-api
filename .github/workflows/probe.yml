@@ -5,45 +5,19 @@ on:
     branches: [feeds-probe-2]
 
 jobs:
-  probe:
+  urls:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        feed:
-          - { id: trenitalia, url: "https://raw.githubusercontent.com/deryclem/trenitalia-gtfs/main/gtfs-trenitalia.zip" }
-          - { id: ch, url: "https://data.opentransportdata.swiss/en/dataset/timetable-2026-gtfs2020/permalink" }
-          - { id: ch-geops, url: "https://gtfs.geops.ch/dl/gtfs_complete.zip" }
-          - { id: de-fv, url: "https://download.gtfs.de/germany/fv_free/latest.zip" }
-          - { id: no, url: "https://storage.googleapis.com/marduk-production/outbound/gtfs/rb_norway-aggregated-gtfs.zip" }
-          - { id: se, url: "https://scraped.data.public-transport.earth/se/gtfs.zip" }
-          - { id: fi, url: "https://traffic.navici.com/tiedostot/gtfs.zip" }
-          - { id: ie, url: "https://www.transportforireland.ie/transitData/google_transit_combined.zip" }
-          - { id: dk, url: "https://www.rejseplanen.info/labs/GTFS.zip" }
     steps:
-      - name: Download
-        run: |
-          curl -sSL --retry 3 -o feed.zip -w "HTTP %{http_code}, %{size_download} bytes, final %{url_effective}\n" "${{ matrix.feed.url }}"
-          unzip -l feed.zip | tail -15
-          unzip -q feed.zip -d feed
-      - name: Describe
-        working-directory: feed
-        run: |
-          for f in agency feed_info calendar; do [ -f $f.txt ] && { echo "== $f ($(wc -l < $f.txt))"; head -4 $f.txt; }; done
-          echo "== stop_times $(wc -l < stop_times.txt) lines"; head -2 stop_times.txt; head -2 stops.txt; head -2 trips.txt
-          python3 - <<'PY'
-          import csv, collections
-          ag = {a.get("agency_id",""): a["agency_name"] for a in csv.DictReader(open("agency.txt", encoding="utf-8-sig"))}
-          routes = list(csv.DictReader(open("routes.txt", encoding="utf-8-sig")))
-          print("routes", len(routes), "types", collections.Counter(r["route_type"] for r in routes).most_common(15))
-          rail = [r for r in routes if r["route_type"] == "2" or (r["route_type"].isdigit() and 100 <= int(r["route_type"]) <= 117)]
-          c = collections.Counter((r["route_type"], r.get("route_short_name","")[:14], r.get("route_desc","")[:14], ag.get(r.get("agency_id",""), "?")[:22]) for r in rail)
-          print("rail routes", len(rail))
-          for k, v in c.most_common(70): print(v, k)
-          ids = {r["route_id"] for r in rail}
-          trips = [t for t in csv.DictReader(open("trips.txt", encoding="utf-8-sig")) if t["route_id"] in ids]
-          print("rail trips", len(trips), "sample", trips[:2])
-          for s in csv.DictReader(open("stops.txt", encoding="utf-8-sig")):
-              if any(w in s["stop_name"] for w in ("Milano Centrale", "Roma Termini", "Zürich HB", "Genève", "Basel SBB", "Paris", "Hamburg Hbf", "Oslo S", "Stockholm Central", "Helsinki", "Dublin Heuston", "København H")) and s.get("location_type","") in ("", "0", "1"):
-                  print("stop", {k: s.get(k) for k in ("stop_id", "stop_name", "location_type", "parent_station")})
-          PY
+      - run: |
+          for u in \
+            https://rata.digitraffic.fi/api/v1/trains/gtfs-passenger.zip \
+            https://rata.digitraffic.fi/api/v1/trains/gtfs-all.zip \
+            https://www.transportforireland.ie/transitData/Data/GTFS_Irish_Rail.zip \
+            https://www.transportforireland.ie/transitData/Data/GTFS_All.zip \
+            https://data.oebb.at/oebb?dataset=uddi:cd36722f-1b9a-11e8-8087-b71b4f81793a \
+            https://mkuran.pl/gtfs/pkpic.zip \
+            https://opentransportdata.swiss/en/terms-of-use/ ; do
+            printf "%s " "$u"; curl -sSL -o f -m 120 -w "%{http_code} %{size_download} %{content_type}\n" -H "User-Agent: train-api probe" "$u" || echo fail
+            case "$u" in *.zip) unzip -l f 2>/dev/null | tail -12;; esac
+            case "$u" in *terms*) python3 -c "import re,html;t=open('f',encoding='utf-8',errors='ignore').read();t=re.sub(r'<[^>]+>',' ',t);t=html.unescape(re.sub(r'\s+',' ',t));i=t.lower().find('commerc');print(t[max(0,i-700):i+900])";; esac
+          done
