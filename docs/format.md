@@ -7,7 +7,7 @@ publishes it per pass in the compact snapshot format (`src/compact.ts`).
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `operator` | string | `sncf`, `renfe`, `nl` |
+| `operator` | string | `sncf`, `renfe`, `nl`, `de`, `it`, `ch`, `no`, `fi`, `ie` |
 | `date` | `YYYY-MM-DD` | departure date |
 | `origin`, `destination` | string | station names exactly as the operator publishes them |
 | `depart`, `arrive` | `HH:MM` | local time; an arrival before the departure is the next day |
@@ -31,12 +31,17 @@ its residence rule, which no timetable can check.
 | `max-senior` | as `max-jeune`, and the date is a weekday | known |
 | `interrail` | the train runs: every TGV INOUI, Intercités, night and international train takes a pass-holder reservation | unknown |
 
-GTFS operators (`renfe`, `nl`) publish only `interrail`. Each kept trip becomes one train
+GTFS operators (every operator but `sncf`) publish only `interrail`. Each kept trip becomes one train
 per pair of stops it calls at, per date it runs, like an SNCF row; a departure after
 midnight is dated the next day. Renfe leaves out AVLO, which doesn't take Interrail. The
 Dutch feed keeps international and long-distance trains (Eurostar, ICE, EuroCity,
 Intercity direct, Nightjet) at every stop, and domestic Intercity trains only between the
-stations those serve.
+stations those serve. The other national feeds work the same way: long-distance families
+at every stop, regional ones (Italy's REG and RV, Switzerland's IR and RE, Norway's R/RE/RX,
+Finland's H, Ireland's commuter lines) only between the long-distance stations, and
+suburban lines, charters and trains that don't take Interrail (Flytoget, the DART,
+panoramic trains) left out. `trainNo` is the trip's number, or the route's short name when
+the feed has none (Germany and Norway give only the line, e.g. `ICE 1`, `F6`).
 
 ## Compact snapshot
 

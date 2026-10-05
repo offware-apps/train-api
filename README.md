@@ -10,6 +10,12 @@ API per operator, built from each operator's own open timetable:
 | `sncf` | SNCF Open Data `tgvmax` (TGV INOUI, Intercités) | Licence Ouverte | MAX JEUNE, MAX SENIOR, Interrail |
 | `renfe` | Renfe Data, high-speed, long and medium distance (GTFS) | CC BY 4.0 | Interrail |
 | `nl` | Dutch national timetable via OVapi (GTFS): international and Intercity trains | CC0 | Interrail |
+| `de` | DELFI via gtfs.de (GTFS): German long-distance trains (ICE, IC, EC…) | CC BY 4.0 | Interrail |
+| `it` | Trenitalia via Italy's National Access Point, converted to GTFS by [deryclem/trenitalia-gtfs](https://github.com/deryclem/trenitalia-gtfs) | CC BY 4.0 | Interrail |
+| `ch` | opentransportdata.swiss (GTFS): Swiss long-distance trains, IR and RE between their stations | free use, source cited | Interrail |
+| `no` | Entur (GTFS): Vy, Go-Ahead and SJ trains in Norway | NLOD | Interrail |
+| `fi` | Fintraffic / digitraffic.fi (GTFS): VR long-distance trains | CC BY 4.0 | Interrail |
+| `ie` | National Transport Authority (GTFS): Irish Rail, without the DART | CC BY 4.0 | Interrail |
 
 The SNCF part is built on top of [MAX-Finder](https://github.com/offware-apps/MAX-Finder):
 the same feed, without MAX-Finder's "free MAX seat only" filter, so every train an
@@ -44,7 +50,12 @@ npm run build:api -- tests/fixtures/sncf-tgvmax.sample.json \
 ## Next
 
 - The front-end on top of MAX-Finder's search core, with Interrail as the pass.
-- More operators through the same GTFS reader (Deutsche Bahn, SNCB once its licence is checked).
+- More operators through the same GTFS reader. Waiting on a free sign-up or a licence
+  check: Great Britain (Network Rail), Sweden (Trafiklab key), Belgium (SNCB), Austria
+  (ÖBB), Denmark (Rejseplanen licence).
 
-Data: SNCF Open Data (Licence Ouverte), Renfe Data (CC BY 4.0), OVapi / NDOV (CC0).
+Data: SNCF Open Data (Licence Ouverte), Renfe Data (CC BY 4.0), OVapi / NDOV (CC0),
+DELFI e.V. / gtfs.de (CC BY 4.0), Trenitalia via the Italian NAP and Clément Desouche
+(CC BY 4.0), opentransportdata.swiss, Entur (NLOD), Fintraffic / digitraffic.fi (CC BY 4.0),
+National Transport Authority (CC BY 4.0).
 Code: AGPL-3.0.

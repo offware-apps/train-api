@@ -1,0 +1,5 @@
+﻿"stop_id","stop_name","location_type","parent_station"
+"Parentch:1:sloid:10","Basel SBB","1",""
+"ch:1:sloid:10:1:1","Basel SBB","","Parentch:1:sloid:10"
+"Parentch:1:sloid:3000","Zürich HB","1",""
+"ch:1:sloid:3000:2:3","Zürich HB","","Parentch:1:sloid:3000"

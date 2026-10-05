@@ -1,0 +1,4 @@
+﻿"route_id","service_id","trip_id","trip_headsign","trip_short_name"
+"R1","TA","T1","Zürich HB",""
+"R2","TA","T2","Winterthur","18123"
+"R1","OLD","T3","Zürich HB","999"

@@ -32,7 +32,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run fetch
-      - run: npm run build:api
+      - run: /usr/bin/time -f "build: %e s, %M KB peak memory" npm run build:api
+        env:
+          NODE_OPTIONS: --max-old-space-size=12288
       - name: Sizes
         run: |
           du -sh public/v1/*

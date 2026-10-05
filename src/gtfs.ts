@@ -34,19 +34,50 @@ export function parseCsvLine(line: string): string[] {
   return out;
 }
 
-/** Stream a GTFS table, calling `onRow` with each row keyed by column name. Missing file → no rows. */
-export async function readTable(dir: string, name: string, onRow: (row: Record<string, string>) => void): Promise<void> {
+/** Only the rows whose `column` passes `keep`, tested before the line is fully parsed. */
+export interface RowFilter {
+  column: string;
+  keep(value: string): boolean;
+}
+
+/** The value of field `idx` in a CSV line, cheaply when the line allows it. */
+function fieldAt(line: string, idx: number): string {
+  if (idx === 0 && line[0] !== '"') {
+    const end = line.indexOf(",");
+    return (end < 0 ? line : line.slice(0, end)).trim();
+  }
+  if (idx === 0) {
+    const end = line.indexOf('"', 1);
+    if (end > 0 && line[end + 1] !== '"') return line.slice(1, end).trim();
+  } else if (!line.includes('"')) return (line.split(",")[idx] ?? "").trim();
+  return parseCsvLine(line)[idx] ?? "";
+}
+
+/**
+ * Stream a GTFS table, calling `onRow` with each row keyed by column name. Missing file → no rows.
+ * `filter` skips rows before parsing them: on a multi-gigabyte stop_times.txt most rows
+ * belong to buses and trams.
+ */
+export async function readTable(
+  dir: string,
+  name: string,
+  onRow: (row: Record<string, string>) => void,
+  filter?: RowFilter,
+): Promise<void> {
   const path = join(dir, `${name}.txt`);
   if (!existsSync(path)) return;
   const lines = createInterface({ input: createReadStream(path, "utf-8"), crlfDelay: Infinity });
   let header: string[] | null = null;
-  for await (const raw of lines) {
-    if (!raw.trim()) continue;
-    const fields = parseCsvLine(raw);
+  let filterIdx = -1;
+  for await (const line of lines) {
+    if (!line.trim()) continue;
     if (!header) {
-      header = fields.map((h) => h.replace(/^﻿/, ""));
+      header = parseCsvLine(line.replace(/^\uFEFF/, ""));
+      if (filter) filterIdx = header.indexOf(filter.column);
       continue;
     }
+    if (filter && filterIdx >= 0 && !filter.keep(fieldAt(line, filterIdx))) continue;
+    const fields = parseCsvLine(line);
     const row: Record<string, string> = {};
     for (let i = 0; i < header.length; i++) row[header[i] as string] = fields[i] ?? "";
     onRow(row);
@@ -76,6 +107,17 @@ function isoDate(d: string): string {
 
 function addDays(date: string, n: number): string {
   return new Date(Date.parse(`${date}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** Shared strings for the values every row repeats, so millions of rows don't each hold a copy. */
+function interner(): (s: string) => string {
+  const seen = new Map<string, string>();
+  return (s) => {
+    const hit = seen.get(s);
+    if (hit !== undefined) return hit;
+    seen.set(s, s);
+    return s;
+  };
 }
 
 /** GTFS "25:10:00" → minutes after midnight of the service day (1510), or NaN. */
@@ -125,22 +167,31 @@ interface Call {
   dep: number;
 }
 
-/** Read one operator's GTFS directory into trains running in [from, from + days). */
+/**
+ * Read one operator's GTFS directory into trains running in [from, from + days).
+ * The train number is the trip's short name, or the route's when the feed gives none
+ * (some feeds only name the line, others put the train number there).
+ */
 export async function readGtfs(dir: string, op: GtfsOperator, from: string, days = 31): Promise<Train[]> {
   const agencies = new Map<string, string>();
   await readTable(dir, "agency", (r) => agencies.set(r.agency_id ?? "", r.agency_name ?? ""));
   const onlyAgency = agencies.size === 1 ? [...agencies.values()][0] ?? "" : "";
 
-  const families = new Map<string, string>();
+  const routes = new Map<string, { family: string; shortName: string }>();
   await readTable(dir, "routes", (r) => {
     const family = op.route(r, agencies.get(r.agency_id ?? "") ?? onlyAgency);
-    if (family) families.set(r.route_id ?? "", family);
+    if (family) routes.set(r.route_id ?? "", { family, shortName: r.route_short_name ?? "" });
   });
 
-  const trips = new Map<string, { service: string; family: string; trainNo: string }>();
+  // Only trips that run in the window: a whole-year feed lists every timetable variant.
+  const dates = await serviceDates(dir, from, days);
+  const trips = new Map<string, { runs: Set<string>; family: string; trainNo: string }>();
   await readTable(dir, "trips", (r) => {
-    const family = families.get(r.route_id ?? "");
-    if (family) trips.set(r.trip_id ?? "", { service: r.service_id ?? "", family, trainNo: r.trip_short_name ?? "" });
+    const route = routes.get(r.route_id ?? "");
+    const runs = dates.get(r.service_id ?? "");
+    if (route && runs?.size) {
+      trips.set(r.trip_id ?? "", { runs, family: route.family, trainNo: r.trip_short_name || route.shortName });
+    }
   });
 
   // Platforms roll up to their station (parent_station), named after the station.
@@ -153,18 +204,21 @@ export async function readGtfs(dir: string, op: GtfsOperator, from: string, days
   const stationOf = (stop: string): string => names.get(parents.get(stop) ?? stop) ?? names.get(stop) ?? "";
 
   const calls = new Map<string, Call[]>();
-  await readTable(dir, "stop_times", (r) => {
-    const trip = r.trip_id ?? "";
-    if (!trips.has(trip)) return;
-    const arr = gtfsMinutes(r.arrival_time || r.departure_time || "");
-    const dep = gtfsMinutes(r.departure_time || r.arrival_time || "");
-    if (Number.isNaN(arr) || Number.isNaN(dep)) return;
-    const list = calls.get(trip) ?? [];
-    list.push({ seq: Number(r.stop_sequence), station: stationOf(r.stop_id ?? ""), arr, dep });
-    calls.set(trip, list);
-  });
+  await readTable(
+    dir,
+    "stop_times",
+    (r) => {
+      const trip = r.trip_id ?? "";
+      const arr = gtfsMinutes(r.arrival_time || r.departure_time || "");
+      const dep = gtfsMinutes(r.departure_time || r.arrival_time || "");
+      if (Number.isNaN(arr) || Number.isNaN(dep)) return;
+      const list = calls.get(trip) ?? [];
+      list.push({ seq: Number(r.stop_sequence), station: stationOf(r.stop_id ?? ""), arr, dep });
+      calls.set(trip, list);
+    },
+    { column: "trip_id", keep: (id) => trips.has(id) },
+  );
 
-  const dates = await serviceDates(dir, from, days);
   const wide = new Set<string>();
   if (op.narrow) {
     for (const [tripId, trip] of trips) {
@@ -172,15 +226,16 @@ export async function readGtfs(dir: string, op: GtfsOperator, from: string, days
       for (const c of calls.get(tripId) ?? []) wide.add(c.station);
     }
   }
+  const str = interner();
   const out: Train[] = [];
   for (const [tripId, trip] of trips) {
-    const runs = dates.get(trip.service);
     const list = calls.get(tripId);
-    if (!runs?.size || !list) continue;
+    if (!list) continue;
     list.sort((a, b) => a.seq - b.seq);
     const narrow = op.narrow?.(trip.family) ?? false;
     const keep = list.filter((c, i) => c.station && c.station !== list[i - 1]?.station && (!narrow || wide.has(c.station)));
     const passes = op.passes(trip.family);
+    const trainNo = str(trip.trainNo);
     for (let i = 0; i < keep.length; i++) {
       for (let j = i + 1; j < keep.length; j++) {
         const a = keep[i] as Call;
@@ -188,19 +243,20 @@ export async function readGtfs(dir: string, op: GtfsOperator, from: string, days
         if (a.station === b.station || b.arr < a.dep) continue;
         // A departure past 24:00 belongs to the next calendar day.
         const shift = Math.floor(a.dep / 1440);
-        for (const d of runs) {
-          const t: Train = {
+        const depart = str(hhmm(a.dep));
+        const arrive = str(hhmm(b.arr));
+        for (const d of trip.runs) {
+          out.push({
             operator: op.id,
-            date: addDays(d, shift),
+            date: str(shift ? addDays(d, shift) : d),
             origin: a.station,
             destination: b.station,
-            depart: hhmm(a.dep),
-            arrive: hhmm(b.arr),
-            trainNo: trip.trainNo,
+            depart,
+            arrive,
+            trainNo,
             category: trip.family,
             passes,
-          };
-          out.push(t);
+          });
         }
       }
     }
