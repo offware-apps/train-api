@@ -1,0 +1,5 @@
+stop_id,stop_code,stop_name,stop_lat,stop_lon,location_type,parent_station
+60000,,Madrid-Puerta de Atocha-Almudena Grandes   ,40.40,-3.69,,
+P1,,Zaragoza platform 1,41.65,-0.91,0,ZGZ
+ZGZ,,Zaragoza-Delicias,41.65,-0.91,1,
+71801,,"Barcelona-Sants",41.38,2.14,,

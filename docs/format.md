@@ -7,12 +7,12 @@ publishes it per pass in the compact snapshot format (`src/compact.ts`).
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `operator` | string | `sncf` for now |
+| `operator` | string | `sncf`, `renfe`, `nl` |
 | `date` | `YYYY-MM-DD` | departure date |
 | `origin`, `destination` | string | station names exactly as the operator publishes them |
 | `depart`, `arrive` | `HH:MM` | local time; an arrival before the departure is the next day |
 | `trainNo` | string | train number |
-| `category` | string, optional | line or train family (SNCF: the `axe`) |
+| `category` | string, optional | line or train family (SNCF: the `axe`; GTFS operators: `AVE`, `Eurostar`, `Intercity`…) |
 | `passes` | object | per pass: `{ bookable, seat }` |
 
 `seat` is `free` or `full` when the data says so, and `unknown` when no open data does.
@@ -30,6 +30,13 @@ its residence rule, which no timetable can check.
 | `max-jeune` | SNCF marks a free MAX seat (`od_happy_card = OUI`), domestic stops only | known |
 | `max-senior` | as `max-jeune`, and the date is a weekday | known |
 | `interrail` | the train runs: every TGV INOUI, Intercités, night and international train takes a pass-holder reservation | unknown |
+
+GTFS operators (`renfe`, `nl`) publish only `interrail`. Each kept trip becomes one train
+per pair of stops it calls at, per date it runs, like an SNCF row; a departure after
+midnight is dated the next day. Renfe leaves out AVLO, which doesn't take Interrail. The
+Dutch feed keeps international and long-distance trains (Eurostar, ICE, EuroCity,
+Intercity direct, Nightjet) at every stop, and domestic Intercity trains only between the
+stations those serve.
 
 ## Compact snapshot
 

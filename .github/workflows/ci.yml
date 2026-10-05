@@ -17,5 +17,23 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - name: Build the API from the fixture
-        run: npm run build:api -- tests/fixtures/sncf-tgvmax.sample.json
+      - name: Build the API from the fixtures
+        run: npm run build:api -- tests/fixtures/sncf-tgvmax.sample.json --gtfs renfe=tests/fixtures/gtfs-mini --from 2026-10-05
+
+  live-feeds:
+    # Operator code changes are checked against the real feeds before they publish.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run fetch
+      - run: npm run build:api
+      - name: Sizes
+        run: |
+          du -sh public/v1/*
+          for f in public/v1/*/*/all.json; do echo "$(du -h "$f" | cut -f1) $(gzip -c "$f" | wc -c | numfmt --to=si)B gzipped  $f"; done
