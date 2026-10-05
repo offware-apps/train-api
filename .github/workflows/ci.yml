@@ -18,7 +18,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - name: Build the API from the fixtures
-        run: npm run build:api -- tests/fixtures/sncf-tgvmax.sample.json --gtfs renfe=tests/fixtures/gtfs-mini --from 2026-10-05
+        run: npm run build:api -- tests/fixtures/sncf-tgvmax.sample.json --gtfs renfe=tests/fixtures/gtfs-mini --gb tests/fixtures/gb-schedule.json --from 2026-10-05
 
   live-feeds:
     # Operator code changes are checked against the real feeds before they publish.
@@ -32,6 +32,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run fetch
+        env:
+          # Feeds behind a free sign-up; each is left out while its secret isn't set.
+          TRAFIKLAB_KEY: ${{ secrets.TRAFIKLAB_KEY }}
+          NETWORK_RAIL_EMAIL: ${{ secrets.NETWORK_RAIL_EMAIL }}
+          NETWORK_RAIL_PASSWORD: ${{ secrets.NETWORK_RAIL_PASSWORD }}
       - name: Build the API from the real feeds
         run: /usr/bin/time -f "%e s, %M KB peak memory" npm run build:api
         env:

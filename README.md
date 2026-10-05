@@ -16,6 +16,11 @@ API per operator, built from each operator's own open timetable:
 | `no` | Entur (GTFS): Vy, Go-Ahead and SJ trains in Norway | NLOD | Interrail |
 | `fi` | Fintraffic / digitraffic.fi (GTFS): VR long-distance trains | CC BY 4.0 | Interrail |
 | `ie` | National Transport Authority (GTFS): Irish Rail, without the DART | CC BY 4.0 | Interrail |
+| `se` | Samtrafiken via Trafiklab, GTFS Sverige 2: long-distance trains, regional between their stations. Needs `TRAFIKLAB_KEY` | CC0 | Interrail |
+| `gb` | Network Rail open data SCHEDULE feed: express trains and sleepers. Needs `NETWORK_RAIL_EMAIL` and `NETWORK_RAIL_PASSWORD` | Network Rail licence (attribution) | Interrail |
+
+`se` and `gb` come from feeds behind a free sign-up: the publish workflow reads the keys
+from repository secrets and leaves an operator out while its secret isn't set.
 
 The SNCF part is built on top of [MAX-Finder](https://github.com/offware-apps/MAX-Finder):
 the same feed, without MAX-Finder's "free MAX seat only" filter, so every train an
@@ -44,18 +49,19 @@ Live at <https://offware-apps.github.io/train-api/v1/index.json> once Pages is o
 npm ci
 npm run check                                              # typecheck + tests
 npm run build:api -- tests/fixtures/sncf-tgvmax.sample.json \
-  --gtfs renfe=tests/fixtures/gtfs-mini --from 2026-10-05    # build from the fixtures
+  --gtfs renfe=tests/fixtures/gtfs-mini --gb tests/fixtures/gb-schedule.json \
+  --from 2026-10-05                                          # build from the fixtures
 ```
 
 ## Next
 
 - The front-end on top of MAX-Finder's search core, with Interrail as the pass.
 - More operators through the same GTFS reader. Waiting on a free sign-up or a licence
-  check: Great Britain (Network Rail), Sweden (Trafiklab key), Belgium (SNCB), Austria
-  (ÖBB), Denmark (Rejseplanen licence).
+  check: Belgium (SNCB), Austria (ÖBB), Denmark (Rejseplanen licence).
 
 Data: SNCF Open Data (Licence Ouverte), Renfe Data (CC BY 4.0), OVapi / NDOV (CC0),
 DELFI e.V. / gtfs.de (CC BY 4.0), Trenitalia via the Italian NAP and Clément Desouche
 (CC BY 4.0), opentransportdata.swiss, Entur (NLOD), Fintraffic / digitraffic.fi (CC BY 4.0),
-National Transport Authority (CC BY 4.0).
+National Transport Authority (CC BY 4.0), Samtrafiken (CC0), contains information of
+Network Rail Infrastructure Limited.
 Code: AGPL-3.0.
