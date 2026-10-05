@@ -9,15 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          for u in \
-            https://rata.digitraffic.fi/api/v1/trains/gtfs-passenger.zip \
-            https://rata.digitraffic.fi/api/v1/trains/gtfs-all.zip \
-            https://www.transportforireland.ie/transitData/Data/GTFS_Irish_Rail.zip \
-            https://www.transportforireland.ie/transitData/Data/GTFS_All.zip \
-            https://data.oebb.at/oebb?dataset=uddi:cd36722f-1b9a-11e8-8087-b71b4f81793a \
-            https://mkuran.pl/gtfs/pkpic.zip \
-            https://opentransportdata.swiss/en/terms-of-use/ ; do
-            printf "%s " "$u"; curl -sSL -o f -m 120 -w "%{http_code} %{size_download} %{content_type}\n" -H "User-Agent: train-api probe" "$u" || echo fail
-            case "$u" in *.zip) unzip -l f 2>/dev/null | tail -12;; esac
-            case "$u" in *terms*) python3 -c "import re,html;t=open('f',encoding='utf-8',errors='ignore').read();t=re.sub(r'<[^>]+>',' ',t);t=html.unescape(re.sub(r'\s+',' ',t));i=t.lower().find('commerc');print(t[max(0,i-700):i+900])";; esac
-          done
+          curl -sS "https://opendata.swiss/api/3/action/package_show?id=fahrplan-2026-gtfs2020" | jq '.result | {license_title, license_id, license_url, rights: [.resources[]?.rights] | unique, res_license: [.resources[]?.license] | unique}'
+          curl -sS "https://data.opentransportdata.swiss/api/3/action/package_show?id=timetable-2026-gtfs2020" | jq '.result | {license_title, license_id, license_url}' || true
+          curl -sSL -o fi.zip -w "fi %{http_code} %{size_download}\n" -H "Accept-Encoding: gzip" -H "Digitraffic-User: train-api" https://rata.digitraffic.fi/api/v1/trains/gtfs-passenger.zip; unzip -l fi.zip | tail -12
+          unzip -p fi.zip feed_info.txt agency.txt routes.txt 2>/dev/null | head -20
+          curl -sSL -o ie.zip https://www.transportforireland.ie/transitData/Data/GTFS_Irish_Rail.zip; unzip -p ie.zip feed_info.txt agency.txt; unzip -p ie.zip routes.txt | head -20; unzip -p ie.zip trips.txt | head -3
