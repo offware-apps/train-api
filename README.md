@@ -25,6 +25,12 @@ change between operators aren't joined here.
 No open data says whether an Interrail pass-holder seat is left, so Interrail trains are
 published as running, with the seat `unknown`.
 
+## Use the API
+
+Free, no key, CORS open, refreshed daily: start with the [developer guide](docs/developers.md)
+(endpoints, JS and Python examples, licences and credits, stability promise) and the
+[OpenAPI spec](docs/openapi.yaml).
+
 ## How it works
 
 1. `npm run fetch` downloads every source to `data/raw/`: the SNCF `tgvmax` feed (every
