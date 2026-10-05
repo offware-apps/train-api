@@ -14,6 +14,12 @@ jobs:
           - { id: trenitalia, url: "https://raw.githubusercontent.com/deryclem/trenitalia-gtfs/main/gtfs-trenitalia.zip" }
           - { id: ch, url: "https://data.opentransportdata.swiss/en/dataset/timetable-2026-gtfs2020/permalink" }
           - { id: ch-geops, url: "https://gtfs.geops.ch/dl/gtfs_complete.zip" }
+          - { id: de-fv, url: "https://download.gtfs.de/germany/fv_free/latest.zip" }
+          - { id: no, url: "https://storage.googleapis.com/marduk-production/outbound/gtfs/rb_norway-aggregated-gtfs.zip" }
+          - { id: se, url: "https://scraped.data.public-transport.earth/se/gtfs.zip" }
+          - { id: fi, url: "https://traffic.navici.com/tiedostot/gtfs.zip" }
+          - { id: ie, url: "https://www.transportforireland.ie/transitData/google_transit_combined.zip" }
+          - { id: dk, url: "https://www.rejseplanen.info/labs/GTFS.zip" }
     steps:
       - name: Download
         run: |
@@ -38,6 +44,6 @@ jobs:
           trips = [t for t in csv.DictReader(open("trips.txt", encoding="utf-8-sig")) if t["route_id"] in ids]
           print("rail trips", len(trips), "sample", trips[:2])
           for s in csv.DictReader(open("stops.txt", encoding="utf-8-sig")):
-              if any(w in s["stop_name"] for w in ("Milano Centrale", "Roma Termini", "Zürich HB", "Genève", "Basel SBB", "Paris")) and s.get("location_type","") in ("", "0", "1"):
+              if any(w in s["stop_name"] for w in ("Milano Centrale", "Roma Termini", "Zürich HB", "Genève", "Basel SBB", "Paris", "Hamburg Hbf", "Oslo S", "Stockholm Central", "Helsinki", "Dublin Heuston", "København H")) and s.get("location_type","") in ("", "0", "1"):
                   print("stop", {k: s.get(k) for k in ("stop_id", "stop_name", "location_type", "parent_station")})
           PY
