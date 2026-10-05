@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { buildIndex, buildOperatorApi, type ApiFile, type ApiIndex } from "../src/api";
+import type { Train } from "../src/format";
 import { readGtfs } from "../src/gtfs";
 import { GTFS_OPERATORS } from "../src/operators";
 import { mapSncfFeed } from "../src/operators/sncf";
@@ -26,18 +27,39 @@ for (let i = 0; i < args.length; i++) {
   else feedArg = a;
 }
 const outDir = resolve("public");
-const files: ApiFile[] = [];
 const entries: ApiIndex["operators"] = [];
 const counts: string[] = [];
+let fileCount = 0;
+let bytes = 0;
+rmSync(join(outDir, "v1"), { recursive: true, force: true });
+
+/** Written as each operator is built, so the largest feeds never sit in memory together. */
+function write(files: ApiFile[]): number {
+  let size = 0;
+  for (const f of files) {
+    const p = join(outDir, f.path);
+    mkdirSync(dirname(p), { recursive: true });
+    const text = JSON.stringify(f.body);
+    size += text.length;
+    writeFileSync(p, text, "utf-8");
+  }
+  fileCount += files.length;
+  bytes += size;
+  return size;
+}
+
+function publish(id: string, source: string, trains: Train[]): void {
+  const built = buildOperatorApi(id, source, trains);
+  const size = write(built.files);
+  entries.push(built.entry);
+  console.log(`[build-api] ${id}: ${built.files.length} files, ${(size / 1e6).toFixed(1)} MB`);
+}
 
 const feedPath = resolve(feedArg ?? "data/raw/sncf-tgvmax.json");
 if (existsSync(feedPath)) {
   const raw: unknown = JSON.parse(readFileSync(feedPath, "utf-8"));
-  if (Array.isArray(raw) && raw.length > 0) {
-    const sncf = buildOperatorApi("sncf", "SNCF Open Data — tgvmax (Licence Ouverte)", mapSncfFeed(raw));
-    files.push(...sncf.files);
-    entries.push(sncf.entry);
-  } else console.error(`[build-api] ${feedPath} is not a non-empty array; SNCF left out.`);
+  if (Array.isArray(raw) && raw.length > 0) publish("sncf", "SNCF Open Data — tgvmax (Licence Ouverte)", mapSncfFeed(raw));
+  else console.error(`[build-api] ${feedPath} is not a non-empty array; SNCF left out.`);
 } else console.error(`[build-api] no SNCF feed at ${feedPath}; SNCF left out.`);
 
 for (const { op } of GTFS_OPERATORS) {
@@ -51,27 +73,15 @@ for (const { op } of GTFS_OPERATORS) {
     console.error(`[build-api] ${op.id}: no trains from ${from}; left out.`);
     continue;
   }
-  const built = buildOperatorApi(op.id, op.source, trains);
-  files.push(...built.files);
-  entries.push(built.entry);
+  publish(op.id, op.source, trains);
 }
 
 if (entries.length === 0) {
   console.error("[build-api] no source to publish.");
   process.exit(1);
 }
-files.push(buildIndex(new Date().toISOString(), entries));
-
-rmSync(join(outDir, "v1"), { recursive: true, force: true });
-let bytes = 0;
-for (const f of files) {
-  const p = join(outDir, f.path);
-  mkdirSync(dirname(p), { recursive: true });
-  const text = JSON.stringify(f.body);
-  bytes += text.length;
-  writeFileSync(p, text, "utf-8");
-}
-console.log(`[build-api] ${files.length} files, ${(bytes / 1e6).toFixed(1)} MB in ${outDir}`);
+write([buildIndex(new Date().toISOString(), entries)]);
+console.log(`[build-api] ${fileCount} files, ${(bytes / 1e6).toFixed(1)} MB in ${outDir}`);
 for (const e of entries) {
   for (const p of e.passes) counts.push(`${e.id}/${p.id}: ${p.trainCount} trains, ${e.stationCount} stations`);
 }

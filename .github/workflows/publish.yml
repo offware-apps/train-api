@@ -1,7 +1,7 @@
 name: Publish API
 
 on:
-  # The SNCF feed refreshes about once a day, around midday Paris time.
+  # The SNCF feed refreshes about once a day, around midday Paris time; the others daily or weekly.
   schedule:
     - cron: "30 13 * * *"
   # Publish a merged change straight away instead of at the next scheduled run.
@@ -30,6 +30,9 @@ jobs:
       - run: npm ci
       - run: npm run fetch
       - run: npm run build:api
+        env:
+          # The national feeds (Switzerland, Germany) expand to millions of rows.
+          NODE_OPTIONS: --max-old-space-size=12288
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
