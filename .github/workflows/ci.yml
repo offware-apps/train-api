@@ -32,7 +32,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run fetch
-      - run: /usr/bin/time -f "build: %e s, %M KB peak memory" npm run build:api
+      - name: Build the API from the real feeds
+        run: /usr/bin/time -f "%e s, %M KB peak memory" npm run build:api
         env:
           NODE_OPTIONS: --max-old-space-size=12288
       - name: Sizes
