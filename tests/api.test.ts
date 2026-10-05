@@ -116,6 +116,19 @@ describe("static API", () => {
     expect(decodeCompact(all)).toHaveLength(trains.length);
   });
 
+  it("sends Interrail holders to each operator's own booking site, with its reservation rules", () => {
+    const sncf = entry.passes.find((p) => p.id === "interrail");
+    expect(sncf?.bookingUrl).toContain("sncf-connect.com");
+    const interrail = { interrail: { bookable: true, seat: "unknown" as const } };
+    const train = { operator: "de", date: "2026-10-05", origin: "Köln Hbf", destination: "Berlin Hbf", depart: "08:00", arrive: "12:30", trainNo: "ICE 1", passes: interrail };
+    const de = buildOperatorApi("de", "test", [train]).entry.passes[0];
+    expect(de?.bookingUrl).toContain("bahn.de");
+    expect(de?.note).toMatch(/need no reservation/);
+    // An operator without its own entry falls back to the general rules.
+    const other = buildOperatorApi("xx", "test", [{ ...train, operator: "xx" }]).entry.passes[0];
+    expect(other?.bookingUrl).toContain("interrail.eu");
+  });
+
   it("answers a search by origin, destination and date from one origin file", () => {
     const stations = file("v1/sncf/stations.json") as { id: string; name: string }[];
     const paris = stations.find((s) => s.name === "PARIS (intramuros)");

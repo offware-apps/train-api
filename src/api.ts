@@ -1,5 +1,6 @@
 import { encodeCompact } from "./compact";
 import { PASSES, PASS_INFO, type PassId, type PassInfo, type Train } from "./format";
+import { INTERRAIL_BY_OPERATOR } from "./operators/interrail";
 
 /**
  * The static API: plain JSON files, so it can be hosted for free and never needs a
@@ -69,7 +70,8 @@ export function buildOperatorApi(
   for (const pass of PASSES) {
     const ok = bookableFor(trains, pass);
     if (ok.length === 0) continue;
-    passes.push({ ...PASS_INFO[pass], trainCount: ok.length });
+    const own = pass === "interrail" ? INTERRAIL_BY_OPERATOR[operator] : undefined;
+    passes.push({ ...PASS_INFO[pass], ...own, trainCount: ok.length });
     files.push({ path: `v1/${operator}/${pass}/all.json`, body: encodeCompact(ok) });
     const byOrigin = new Map<string, Train[]>();
     for (const t of ok) {
