@@ -20,7 +20,8 @@ publishes it per pass in the compact snapshot format (`src/compact.ts`).
 The SNCF feed has one MAX flag for both MAX passes (they share one quota), so `max-jeune`
 and `max-senior` differ only by MAX SENIOR's own rules. Its weekday rule is applied; its
 off-peak limits (Friday afternoon and evening, Monday morning, eves of holidays) are not in
-the data, so `index.json` carries them as the pass's `note`.
+the data, so `index.json` carries them as the pass's `note`. Interrail's `note` carries
+its residence rule, which no timetable can check.
 
 ## Passes
 

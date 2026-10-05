@@ -4,6 +4,9 @@ on:
   # The SNCF feed refreshes about once a day, around midday Paris time.
   schedule:
     - cron: "30 13 * * *"
+  # Publish a merged change straight away instead of at the next scheduled run.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
