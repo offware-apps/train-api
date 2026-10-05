@@ -11,7 +11,6 @@ jobs:
       fail-fast: false
       matrix:
         feed:
-          - { id: renfe, url: "https://ssl.renfe.com/gtransit/Fichero_AV_LD/google_transit.zip" }
           - { id: nl, url: "http://gtfs.openov.nl/gtfs-rt/gtfs-openov-nl.zip" }
     steps:
       - name: Download
@@ -22,25 +21,38 @@ jobs:
       - name: Describe
         working-directory: feed
         run: |
-          for f in agency routes stops calendar calendar_dates feed_info; do
-            [ -f $f.txt ] || continue
-            echo "== $f.txt ($(wc -l < $f.txt) lines)"; head -5 $f.txt
-          done
-          echo "== stop_times.txt ($(wc -l < stop_times.txt) lines)"; head -3 stop_times.txt
-          echo "== trips.txt ($(wc -l < trips.txt) lines)"; head -3 trips.txt
+          echo "== stop_times.txt $(wc -l < stop_times.txt) lines, $(du -h stop_times.txt | cut -f1)"
+          echo "== feed_info"; cat feed_info.txt 2>/dev/null | head -3
           python3 - <<'PY'
           import csv, collections
-          routes = list(csv.DictReader(open("routes.txt", encoding="utf-8-sig")))
-          agencies = {a["agency_id"]: a["agency_name"] for a in csv.DictReader(open("agency.txt", encoding="utf-8-sig"))} if True else {}
-          rail = [r for r in routes if r["route_type"] in {"2"} or (r["route_type"].isdigit() and 100 <= int(r["route_type"]) <= 117)]
-          print("routes", len(routes), "rail", len(rail))
-          print("route_type counts", collections.Counter(r["route_type"] for r in routes).most_common(12))
-          print("rail by agency", collections.Counter(agencies.get(r.get("agency_id",""), r.get("agency_id","")) for r in rail).most_common(25))
-          names = collections.Counter((agencies.get(r.get("agency_id",""), ""), r.get("route_short_name",""), r.get("route_long_name","")[:40], r.get("route_desc","")[:30], r["route_type"]) for r in rail)
-          for k, v in names.most_common(60): print(v, k)
-          railids = {r["route_id"] for r in rail}
-          trips = [t for t in csv.DictReader(open("trips.txt", encoding="utf-8-sig")) if t["route_id"] in railids]
-          print("rail trips", len(trips))
-          intl = [s for s in csv.DictReader(open("stops.txt", encoding="utf-8-sig")) if any(w in s["stop_name"].lower() for w in ["amsterdam c", "bruxelles", "brussel", "madrid", "barcelona", "paris", "antwerpen c", "rotterdam c"])]
-          for s in intl[:40]: print("stop", s.get("stop_id"), s.get("stop_name"), s.get("stop_code",""), s.get("location_type",""), s.get("parent_station",""))
+          ag = {a["agency_id"]: a["agency_name"] for a in csv.DictReader(open("agency.txt", encoding="utf-8-sig"))}
+          routes = {r["route_id"]: r for r in csv.DictReader(open("routes.txt", encoding="utf-8-sig")) if r["route_type"] == "2"}
+          for r in routes.values():
+              if ag.get(r["agency_id"]) in ("NS International",) or "Brussel" in r["route_long_name"] or "Bruxelles" in r["route_long_name"] or "Eurostar" in r["route_short_name"]:
+                  print("intl", ag.get(r["agency_id"]), "|", r["route_short_name"], "|", r["route_long_name"])
+          print("rail short names", collections.Counter(r["route_short_name"].split(" ")[0] for r in routes.values()).most_common(20))
+          trips = {t["trip_id"]: t for t in csv.DictReader(open("trips.txt", encoding="utf-8-sig")) if t["route_id"] in routes}
+          print("rail trips", len(trips), "services", len({t["service_id"] for t in trips.values()}))
+          stops = {s["stop_id"]: s for s in csv.DictReader(open("stops.txt", encoding="utf-8-sig"))}
+          print("stops header", list(next(iter(stops.values())).keys()))
+          areas = [s for s in stops.values() if s["stop_id"].startswith("stoparea")][:5]
+          print("sample stoparea rows", areas)
+          # Rail stop_times: count, and stations used by rail.
+          used = collections.Counter(); n = 0; per_trip = collections.Counter()
+          with open("stop_times.txt", encoding="utf-8-sig") as f:
+              rd = csv.reader(f); h = next(rd); ti = h.index("trip_id"); si = h.index("stop_id")
+              print("stop_times header", h)
+              for row in rd:
+                  if row[ti] in trips:
+                      n += 1; per_trip[row[ti]] += 1
+                      st = stops.get(row[si], {}); used[st.get("parent_station") or row[si]] += 1
+          print("rail stop_times", n, "avg stops/trip", round(n / max(1, len(per_trip)), 1), "rail stations", len(used))
+          names = {}
+          for sid, s in stops.items(): names.setdefault(s.get("parent_station") or sid, s["stop_name"])
+          for k, v in used.most_common(15): print("station", k, names.get(k), stops.get(k, {}).get("stop_name"), v)
+          for k in used:
+              nm = (stops.get(k, {}).get("stop_name") or names.get(k, ""))
+              if any(w in nm for w in ("Brussel", "Bruxelles", "Paris", "Antwerpen", "Köln", "Frankfurt", "Berlin", "London")): print("intl station", k, nm)
+          cal = list(csv.DictReader(open("calendar_dates.txt", encoding="utf-8-sig")))
+          ds = sorted({c["date"] for c in cal}); print("calendar_dates", len(cal), ds[0], ds[-1], "calendar.txt?", __import__("os").path.exists("calendar.txt"))
           PY
