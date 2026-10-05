@@ -1,0 +1,53 @@
+name: Archive MAX seats
+
+# The SNCF feed only shows today's seat state. This keeps one snapshot a day on the public
+# `data` branch (archive/max/YYYY/YYYY-MM-DD.json.gz), so seat odds can be computed later.
+# A day already archived is never overwritten.
+
+on:
+  # After the feed's midday refresh and the 13:30 publish.
+  schedule:
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run fetch
+      - name: Check out the data branch
+        run: |
+          if git ls-remote --exit-code --heads origin data >/dev/null; then
+            git fetch --depth=1 origin data
+            git worktree add data-branch FETCH_HEAD
+          else
+            git worktree add --detach data-branch
+            git -C data-branch checkout --orphan data
+            git -C data-branch rm -rfq --ignore-unmatch .
+          fi
+      - run: npx tsx scripts/archive-max.ts data/raw/sncf-tgvmax.json data-branch/archive/max
+      - name: Commit and push
+        working-directory: data-branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add archive
+          if git diff --cached --quiet; then
+            echo "Nothing new to archive."
+            exit 0
+          fi
+          git commit -q -m "Archive MAX seats for $(date -u +%F)"
+          git push origin HEAD:data
