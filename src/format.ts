@@ -7,7 +7,7 @@
  */
 
 /** Passes the API knows. Add one here, then teach each operator's mapper about it. */
-export const PASSES = ["max", "interrail"] as const;
+export const PASSES = ["max-jeune", "max-senior", "interrail"] as const;
 export type PassId = (typeof PASSES)[number];
 
 /** "free" / "full" when the data says so; "unknown" when no open data does (Interrail). */
@@ -43,14 +43,23 @@ export interface PassInfo {
   seatKnown: boolean;
   /** Where its holders book. */
   bookingUrl: string;
+  /** Pass rules the data can't check, for clients to show. */
+  note?: string;
 }
 
 export const PASS_INFO: Record<PassId, PassInfo> = {
-  max: {
-    id: "max",
-    name: "MAX JEUNE / MAX SENIOR",
+  "max-jeune": {
+    id: "max-jeune",
+    name: "MAX JEUNE",
     seatKnown: true,
     bookingUrl: "https://www.sncf-connect.com/",
+  },
+  "max-senior": {
+    id: "max-senior",
+    name: "MAX SENIOR",
+    seatKnown: true,
+    bookingUrl: "https://www.sncf-connect.com/",
+    note: "Weekdays only, off-peak. Weekend trains are left out; peak periods (Friday afternoon and evening, Monday morning, eves of holidays) are not in the data, so check before booking.",
   },
   interrail: {
     id: "interrail",

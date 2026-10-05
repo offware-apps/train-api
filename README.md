@@ -2,7 +2,7 @@
 
 > **Work in progress.** "train-api" is a placeholder name; the final name isn't chosen yet.
 
-Open train data for rail passes, starting with **Interrail** on SNCF. It is built on top
+Open train data for rail passes on SNCF: **MAX JEUNE**, **MAX SENIOR** and **Interrail**. It is built on top
 of [MAX-Finder](https://github.com/offware-apps/MAX-Finder): the same SNCF open-data feed,
 without MAX-Finder's "free MAX seat only" filter, so every train an Interrail holder can
 book shows up.

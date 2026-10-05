@@ -17,11 +17,17 @@ publishes it per pass in the compact snapshot format (`src/compact.ts`).
 
 `seat` is `free` or `full` when the data says so, and `unknown` when no open data does.
 
+The SNCF feed has one MAX flag for both MAX passes (they share one quota), so `max-jeune`
+and `max-senior` differ only by MAX SENIOR's own rules. Its weekday rule is applied; its
+off-peak limits (Friday afternoon and evening, Monday morning, eves of holidays) are not in
+the data, so `index.json` carries them as the pass's `note`.
+
 ## Passes
 
 | Pass | Bookable when | Seat |
 |------|---------------|------|
-| `max` (MAX JEUNE / SENIOR) | SNCF marks a free MAX seat (`od_happy_card = OUI`), domestic stops only | known |
+| `max-jeune` | SNCF marks a free MAX seat (`od_happy_card = OUI`), domestic stops only | known |
+| `max-senior` | as `max-jeune`, and the date is a weekday | known |
 | `interrail` | the train runs: every TGV INOUI, Intercités, night and international train takes a pass-holder reservation | unknown |
 
 ## Compact snapshot
@@ -47,7 +53,7 @@ All static files under `/v1/`:
 
 | Path | Content |
 |------|---------|
-| `index.json` | freshness, dates covered, and each pass with its `seatKnown`, `bookingUrl`, `trainCount` |
+| `index.json` | freshness, dates covered, and each pass with its `seatKnown`, `bookingUrl`, `note`, `trainCount` |
 | `<operator>/stations.json` | `[{ id, name }]`; `id` is the URL slug used below |
 | `<operator>/<pass>/all.json` | every bookable train for the pass (compact) |
 | `<operator>/<pass>/from/<id>.json` | the bookable trains leaving one station (compact) |

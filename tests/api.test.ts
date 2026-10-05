@@ -30,16 +30,27 @@ describe("SNCF mapping", () => {
       trainNo: "6601",
       category: "SUD EST",
       passes: {
-        max: { bookable: false, seat: "full" },
+        "max-jeune": { bookable: false, seat: "full" },
+        "max-senior": { bookable: false, seat: "full" },
         interrail: { bookable: true, seat: "unknown" },
       },
     });
-    expect(mapSncf(rec({ od_happy_card: "OUI" }))?.passes.max).toEqual({ bookable: true, seat: "free" });
+    // 2026-10-12 is a Monday: both MAX passes can take it.
+    const weekday = mapSncf(rec({ od_happy_card: "OUI" }));
+    expect(weekday?.passes["max-jeune"]).toEqual({ bookable: true, seat: "free" });
+    expect(weekday?.passes["max-senior"]).toEqual({ bookable: true, seat: "free" });
+  });
+
+  it("keeps MAX SENIOR off weekends, MAX JEUNE on them", () => {
+    const saturday = mapSncf(rec({ od_happy_card: "OUI", date: "2026-10-10" }));
+    expect(saturday?.passes["max-jeune"]?.bookable).toBe(true);
+    expect(saturday?.passes["max-senior"]).toEqual({ bookable: false, seat: "free" });
   });
 
   it("keeps international stops for Interrail only", () => {
     const t = mapSncf(rec({ od_happy_card: "OUI", destination: "GENÈVE" }));
-    expect(t?.passes.max?.bookable).toBe(false);
+    expect(t?.passes["max-jeune"]?.bookable).toBe(false);
+    expect(t?.passes["max-senior"]?.bookable).toBe(false);
     expect(t?.passes.interrail?.bookable).toBe(true);
   });
 
@@ -97,7 +108,8 @@ describe("static API", () => {
 
   it("publishes each pass, with Interrail counting every train", () => {
     expect(entry.passes.map((p) => [p.id, p.trainCount, p.seatKnown])).toEqual([
-      ["max", trains.filter((t) => t.passes.max?.bookable).length, true],
+      ["max-jeune", trains.filter((t) => t.passes["max-jeune"]?.bookable).length, true],
+      ["max-senior", trains.filter((t) => t.passes["max-senior"]?.bookable).length, true],
       ["interrail", trains.length, false],
     ]);
     const all = file("v1/sncf/interrail/all.json") as CompactSnapshot;

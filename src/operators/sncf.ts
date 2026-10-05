@@ -26,6 +26,12 @@ function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
 
+/** Saturday or Sunday, for a "YYYY-MM-DD" date. */
+function isWeekend(date: string): boolean {
+  const day = new Date(`${date}T12:00:00Z`).getUTCDay();
+  return day === 0 || day === 6;
+}
+
 function fold(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
@@ -61,7 +67,10 @@ export function mapSncf(r: SncfRecord): Train | null {
     arrive,
     trainNo: str(r.train_no),
     passes: {
-      max: { bookable: maxSeat && !international, seat: maxSeat ? "free" : "full" },
+      // One flag covers both MAX passes: the feed has a single MAX quota.
+      "max-jeune": { bookable: maxSeat && !international, seat: maxSeat ? "free" : "full" },
+      // MAX SENIOR is weekday-only; its off-peak limits aren't in the data (see PASS_INFO).
+      "max-senior": { bookable: maxSeat && !international && !isWeekend(date), seat: maxSeat ? "free" : "full" },
       // Every train in this feed takes an Interrail pass-holder reservation; no open
       // data says whether one is left.
       interrail: { bookable: true, seat: "unknown" },
