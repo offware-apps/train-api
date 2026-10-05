@@ -65,7 +65,9 @@ export const PASS_INFO: Record<PassId, PassInfo> = {
     id: "interrail",
     name: "Interrail",
     seatKnown: false,
-    bookingUrl: "https://www.sncf-connect.com/",
-    note: "Every train here needs a paid pass-holder reservation. A Global Pass covers only one outbound and one return trip inside your country of residence.",
+    // Each operator's index entry carries its own booking site and reservation rules
+    // (src/operators/interrail.ts); these are the fallback.
+    bookingUrl: "https://www.interrail.eu/en/plan-your-trip/reservations",
+    note: "Reservation rules depend on the operator and the train. A Global Pass covers only one outbound and one return trip inside your country of residence.",
   },
 };
