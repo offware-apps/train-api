@@ -105,12 +105,12 @@ function isoDate(d: string): string {
   return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
 }
 
-function addDays(date: string, n: number): string {
+export function addDays(date: string, n: number): string {
   return new Date(Date.parse(`${date}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 }
 
 /** Shared strings for the values every row repeats, so millions of rows don't each hold a copy. */
-function interner(): (s: string) => string {
+export function interner(): (s: string) => string {
   const seen = new Map<string, string>();
   return (s) => {
     const hit = seen.get(s);
@@ -160,11 +160,53 @@ async function serviceDates(dir: string, from: string, days: number): Promise<Ma
   return out;
 }
 
-interface Call {
+/** One stop of a train: minutes after midnight of its service day, past 1440 the next day. */
+export interface Call {
   seq: number;
   station: string;
   arr: number;
   dep: number;
+}
+
+/**
+ * One `Train` per pair of the calls (in order), per date the train runs: "this train
+ * goes from A to B that day". A departure past 24:00 is dated the next calendar day.
+ */
+export function pushStopPairs(
+  out: Train[],
+  str: (s: string) => string,
+  operator: string,
+  calls: Call[],
+  runs: Iterable<string>,
+  trainNo: string,
+  category: string,
+  passes: Partial<Record<PassId, PassAvailability>>,
+): void {
+  const no = str(trainNo);
+  const dates = [...runs];
+  for (let i = 0; i < calls.length; i++) {
+    for (let j = i + 1; j < calls.length; j++) {
+      const a = calls[i] as Call;
+      const b = calls[j] as Call;
+      if (a.station === b.station || b.arr < a.dep) continue;
+      const shift = Math.floor(a.dep / 1440);
+      const depart = str(hhmm(a.dep));
+      const arrive = str(hhmm(b.arr));
+      for (const d of dates) {
+        out.push({
+          operator,
+          date: str(shift ? addDays(d, shift) : d),
+          origin: a.station,
+          destination: b.station,
+          depart,
+          arrive,
+          trainNo: no,
+          category,
+          passes,
+        });
+      }
+    }
+  }
 }
 
 /**
@@ -234,32 +276,7 @@ export async function readGtfs(dir: string, op: GtfsOperator, from: string, days
     list.sort((a, b) => a.seq - b.seq);
     const narrow = op.narrow?.(trip.family) ?? false;
     const keep = list.filter((c, i) => c.station && c.station !== list[i - 1]?.station && (!narrow || wide.has(c.station)));
-    const passes = op.passes(trip.family);
-    const trainNo = str(trip.trainNo);
-    for (let i = 0; i < keep.length; i++) {
-      for (let j = i + 1; j < keep.length; j++) {
-        const a = keep[i] as Call;
-        const b = keep[j] as Call;
-        if (a.station === b.station || b.arr < a.dep) continue;
-        // A departure past 24:00 belongs to the next calendar day.
-        const shift = Math.floor(a.dep / 1440);
-        const depart = str(hhmm(a.dep));
-        const arrive = str(hhmm(b.arr));
-        for (const d of trip.runs) {
-          out.push({
-            operator: op.id,
-            date: str(shift ? addDays(d, shift) : d),
-            origin: a.station,
-            destination: b.station,
-            depart,
-            arrive,
-            trainNo,
-            category: trip.family,
-            passes,
-          });
-        }
-      }
-    }
+    pushStopPairs(out, str, op.id, keep, trip.runs, trip.trainNo, trip.family, op.passes(trip.family));
   }
   return out;
 }

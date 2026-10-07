@@ -7,7 +7,7 @@ publishes it per pass in the compact snapshot format (`src/compact.ts`).
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `operator` | string | `sncf`, `renfe`, `nl`, `de`, `it`, `ch`, `no`, `fi`, `ie` |
+| `operator` | string | `sncf`, `renfe`, `nl`, `de`, `it`, `ch`, `no`, `fi`, `ie`, `se`, `gb` |
 | `date` | `YYYY-MM-DD` | departure date |
 | `origin`, `destination` | string | station names exactly as the operator publishes them |
 | `depart`, `arrive` | `HH:MM` | local time; an arrival before the departure is the next day |
@@ -44,6 +44,12 @@ Finland's H, Ireland's commuter lines) only between the long-distance stations, 
 suburban lines, charters and trains that don't take Interrail (Flytoget, the DART,
 panoramic trains) left out. `trainNo` is the trip's number, or the route's short name when
 the feed has none (Germany and Norway give only the line, e.g. `ICE 1`, `F6`).
+
+Great Britain (`gb`) comes from Network Rail's SCHEDULE feed instead of GTFS. Each train's
+permanent schedule is replaced, date by date, by any short-term overlay or cancellation
+that covers that date. Only public calls count, express trains and sleepers are kept
+(stopping trains, Heathrow Express, Lumo and Eurostar are left out), `trainNo` is the
+headcode (e.g. `1S07`) and `category` the train operator (LNER, Avanti West Coast…).
 
 ## Compact snapshot
 

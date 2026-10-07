@@ -29,6 +29,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run fetch
+        env:
+          # Feeds behind a free sign-up; each is left out while its secret isn't set.
+          TRAFIKLAB_KEY: ${{ secrets.TRAFIKLAB_KEY }}
+          NETWORK_RAIL_EMAIL: ${{ secrets.NETWORK_RAIL_EMAIL }}
+          NETWORK_RAIL_PASSWORD: ${{ secrets.NETWORK_RAIL_PASSWORD }}
       - run: npm run build:api
         env:
           # The national feeds (Switzerland, Germany) expand to millions of rows.

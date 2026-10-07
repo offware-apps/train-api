@@ -2,9 +2,10 @@
  * Build the static API into public/ from the sources on disk (see `npm run fetch`):
  *   data/raw/sncf-tgvmax.json, or the feed file given as the first argument
  *   data/raw/<operator>/       each GTFS operator, or `--gtfs <operator>=<dir>`
+ *   data/raw/gb-schedule.json.gz  Network Rail's SCHEDULE extract, or `--gb <file>`
  * `--from YYYY-MM-DD` sets the first day of the GTFS window (default: today, UTC).
  * Sources that are missing are left out; the build fails only when none is there.
- * Run: npm run build:api [-- <feed.json>] [--gtfs renfe=<dir>] [--from <date>]
+ * Run: npm run build:api [-- <feed.json>] [--gtfs renfe=<dir>] [--gb <file>] [--from <date>]
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -12,18 +13,21 @@ import { buildIndex, buildOperatorApi, type ApiFile, type ApiIndex } from "../sr
 import type { Train } from "../src/format";
 import { readGtfs } from "../src/gtfs";
 import { GTFS_OPERATORS } from "../src/operators";
+import { GB_SOURCE, readNetworkRail } from "../src/operators/gb";
 import { mapSncfFeed } from "../src/operators/sncf";
 
 const args = process.argv.slice(2);
 const gtfsDirs = new Map<string, string>();
 let feedArg: string | undefined;
+let gbArg: string | undefined;
 let from = new Date().toISOString().slice(0, 10);
 for (let i = 0; i < args.length; i++) {
   const a = args[i] as string;
   if (a === "--gtfs") {
     const [id, dir] = (args[++i] ?? "").split("=");
     if (id && dir) gtfsDirs.set(id, resolve(dir));
-  } else if (a === "--from") from = args[++i] ?? from;
+  } else if (a === "--gb") gbArg = resolve(args[++i] ?? "");
+  else if (a === "--from") from = args[++i] ?? from;
   else feedArg = a;
 }
 const outDir = resolve("public");
@@ -74,6 +78,14 @@ for (const { op } of GTFS_OPERATORS) {
     continue;
   }
   publish(op.id, op.source, trains);
+}
+
+// Great Britain: Network Rail's SCHEDULE extract, when `npm run fetch` had the account to get it.
+const gbPath = gbArg ?? ["gb-schedule.json.gz", "gb-schedule.json"].map((f) => resolve("data/raw", f)).find((p) => existsSync(p));
+if (gbPath) {
+  const trains = await readNetworkRail(gbPath, from);
+  if (trains.length > 0) publish("gb", GB_SOURCE, trains);
+  else console.error(`[build-api] gb: no trains from ${from}; left out.`);
 }
 
 if (entries.length === 0) {
