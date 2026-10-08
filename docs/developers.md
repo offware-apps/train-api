@@ -42,7 +42,8 @@ python3 examples/search.py renfe interrail madrid-puerta-de-atocha-almudena-gran
 | `<operator>/<pass>/from/<stationId>.json` | the trains bookable with the pass that leave one station ([compact](#compact-snapshot)) |
 | `<operator>/<pass>/all.json` | every train bookable with the pass ([compact](#compact-snapshot)); several MB for the large feeds |
 
-Operators today: `sncf`, `renfe`, `nl`, `de`, `it`, `ch`, `no`, `fi`, `ie`. Passes:
+Operators today: `sncf`, `renfe`, `nl`, `de`, `it`, `ch`, `no`, `fi`, `ie`, with `gb` and
+`se` added once their feeds' free accounts are set up. Passes:
 `max-jeune` and `max-senior` (SNCF only), `interrail` (all). Read both lists from
 `index.json` rather than hard-coding them: operators and passes get added.
 
@@ -184,6 +185,8 @@ about page:
 | `no` | Entur | [NLOD 2.0](https://data.norge.no/nlod/en/2.0) | "Contains data under the Norwegian licence for Open Government data (NLOD) distributed by Entur" |
 | `fi` | Fintraffic, digitraffic.fi | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | "Fintraffic / digitraffic.fi" |
 | `ie` | National Transport Authority | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | "National Transport Authority" |
+| `se` | Samtrafiken via Trafiklab, GTFS Sverige 2 | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | none required; "Samtrafiken / Trafiklab" appreciated |
+| `gb` | Network Rail open data, SCHEDULE feed | [Network Rail data feeds licence](https://www.networkrail.co.uk/data-feeds/terms-and-conditions/) | "Contains information of Network Rail Infrastructure Limited" |
 
 The `source` field in `index.json` repeats each source and licence, so an app can build its
 credit line from it. A link back to this repository is welcome and never required. This
