@@ -38,6 +38,7 @@ jobs:
         env:
           # The national feeds (Switzerland, Germany) expand to millions of rows.
           NODE_OPTIONS: --max-old-space-size=12288
+      - run: npm run build:places
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

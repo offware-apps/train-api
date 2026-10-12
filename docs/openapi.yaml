@@ -82,6 +82,36 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CompactSnapshot" }
         "404": { $ref: "#/components/responses/NotPublished" }
+  /places.json:
+    get:
+      operationId: getStationPlaces
+      summary: The town or city each station is in, for its guides and sights
+      description: |
+        Places come from the Offware places dataset (Wikidata, CC0). Replace `{id}` in
+        `placeUrl` with a station's place id to read that place. Not published when the
+        dataset couldn't be read at build time.
+      responses:
+        "200":
+          description: Station to place links.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, updatedAt, placeUrl, license, attribution, stations]
+                properties:
+                  version: { type: integer, const: 1 }
+                  updatedAt: { type: string, format: date-time }
+                  placeUrl:
+                    type: string
+                    example: https://offware-apps.github.io/places/v1/places/{id}.json
+                  license: { type: string, example: CC0-1.0 }
+                  attribution: { type: string }
+                  stations:
+                    type: object
+                    description: '"<operator>/<station id>" to place id. Stations no place matched are left out.'
+                    additionalProperties: { type: string }
+                    example: { sncf/lyon-intramuros: lyon }
+        "404": { $ref: "#/components/responses/NotPublished" }
   /archive/max/{year}/{date}.json.gz:
     servers:
       - url: https://raw.githubusercontent.com/offware-apps/train-api/data
