@@ -2,10 +2,10 @@
  * Write public/v1/places.json: the town or city each station is in (see src/places.ts).
  * Runs after `npm run build:api`, whose stations.json files it reads.
  *
- * It reads the places dataset's index.json, or a saved copy with `--index <file>`. When the
- * dataset can't be reached it writes nothing and exits cleanly: the timetables still publish.
+ * It reads the shared data's places/index.json, or a saved copy with `--index <file>`. When the
+ * data can't be reached it writes nothing and exits cleanly: the timetables still publish.
  *
- * Run: npm run build:places [-- --index <index.json>]
+ * Run: npm run build:places [-- --index <places/index.json>]
  */
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -31,7 +31,7 @@ function readStations(): StationRef[] {
 
 async function readIndex(): Promise<PlacesIndex> {
   if (indexArg) return JSON.parse(readFileSync(resolve(indexArg), "utf-8")) as PlacesIndex;
-  const res = await fetch(`${base}/index.json`, {
+  const res = await fetch(`${base}/places/index.json`, {
     headers: { "User-Agent": "train-api/0.1 (https://github.com/offware-apps/train-api)" },
     signal: AbortSignal.timeout(120_000),
   });
@@ -51,7 +51,7 @@ try {
   // Only a CC0 dataset is republished here, with its attribution.
   if (index.license !== "CC0-1.0" || !Array.isArray(index.places)) throw new Error("unexpected shape or licence");
 } catch (err) {
-  console.error(`[places] places dataset not read, places.json left out (${String(err)})`);
+  console.error(`[places] shared data not read, places.json left out (${String(err)})`);
   process.exit(0);
 }
 

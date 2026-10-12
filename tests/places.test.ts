@@ -44,6 +44,6 @@ describe("station to place", () => {
     expect(out.stations).toEqual({ "renfe/valencia-joaquin-sorolla": "valencia", "sncf/lyon-part-dieu": "lyon" });
     expect(out.license).toBe("CC0-1.0");
     expect(out.attribution).toContain("Wikidata");
-    expect(out.placeUrl).toBe("https://offware-apps.github.io/places/v1/places/{id}.json");
+    expect(out.placeUrl).toBe("https://offware-apps.github.io/data/v1/places/{id}.json");
   });
 });

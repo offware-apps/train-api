@@ -87,7 +87,7 @@ paths:
       operationId: getStationPlaces
       summary: The town or city each station is in, for its guides and sights
       description: |
-        Places come from the Offware places dataset (Wikidata, CC0). Replace `{id}` in
+        Places come from Offware's shared data (Wikidata, CC0). Replace `{id}` in
         `placeUrl` with a station's place id to read that place. Not published when the
         dataset couldn't be read at build time.
       responses:
@@ -103,7 +103,7 @@ paths:
                   updatedAt: { type: string, format: date-time }
                   placeUrl:
                     type: string
-                    example: https://offware-apps.github.io/places/v1/places/{id}.json
+                    example: https://offware-apps.github.io/data/v1/places/{id}.json
                   license: { type: string, example: CC0-1.0 }
                   attribution: { type: string }
                   stations:

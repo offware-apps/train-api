@@ -196,12 +196,12 @@ table is a summary: the source's own licence text is what applies.
 ## Guides and sights
 
 `places.json` links each station to the town or city it's in, so an app can show what to
-see there. The places come from the [Offware places dataset](https://github.com/offware-apps/places),
+see there. The places come from the [Offware shared data](https://github.com/offware-apps/data),
 built from Wikidata (CC0); this file only holds the link:
 
 ```json
 {
-  "placeUrl": "https://offware-apps.github.io/places/v1/places/{id}.json",
+  "placeUrl": "https://offware-apps.github.io/data/v1/places/{id}.json",
   "license": "CC0-1.0",
   "attribution": "Data from Wikidata (CC0). …",
   "stations": { "sncf/lyon-intramuros": "lyon", "renfe/valencia-joaquin-sorolla": "valencia" }
@@ -211,7 +211,7 @@ built from Wikidata (CC0); this file only holds the link:
 Replace `{id}` in `placeUrl` with a station's place to get its links to free guides
 (Wikivoyage, Wikipedia) and its sights. A station is matched by name, so one no place
 matched is left out. Each place names the Wikidata item it comes from: an error is fixed
-there, and reaches the dataset and this file on the next weekly build.
+there, and reaches the shared data and this file on the next weekly build.
 
 ## Stability
 

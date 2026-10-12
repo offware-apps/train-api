@@ -1,7 +1,7 @@
 /**
  * Which town or city each station is in, so an app can show a station's guides and sights.
- * The places themselves come from the Offware places dataset
- * (https://github.com/offware-apps/places, Wikidata, CC0); this API only links stations to
+ * The places themselves come from the Offware shared data
+ * (https://github.com/offware-apps/data, Wikidata, CC0); this API only links stations to
  * them, in one file:
  *
  *   v1/places.json   { "<operator>/<station id>": "<place id>" }, plus where to read a place
@@ -9,7 +9,7 @@
  * See docs/format.md.
  */
 
-export const PLACES_BASE = "https://offware-apps.github.io/places/v1";
+export const PLACES_BASE = "https://offware-apps.github.io/data/v1";
 
 /** Country each operator's stations are in first; a station abroad still matches by name. */
 export const OPERATOR_COUNTRY: Record<string, string> = {
@@ -33,7 +33,7 @@ export const EUROPE = new Set([
   "NL", "NO", "PL", "PT", "RO", "RS", "SE", "SI", "SK", "SM", "TR", "XK",
 ]);
 
-/** A town or city as the places dataset's index.json lists it. */
+/** A town or city as the shared data's places/index.json lists it. */
 export interface IndexPlace {
   id: string;
   name: string;
@@ -43,7 +43,7 @@ export interface IndexPlace {
   population: number;
 }
 
-/** The places dataset's index.json. */
+/** The shared data's places/index.json. */
 export interface PlacesIndex {
   license: string;
   attribution: string;
