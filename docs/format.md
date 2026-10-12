@@ -78,5 +78,6 @@ All static files under `/v1/`:
 | `<operator>/stations.json` | `[{ id, name }]`; `id` is the URL slug used below |
 | `<operator>/<pass>/all.json` | every bookable train for the pass (compact) |
 | `<operator>/<pass>/from/<id>.json` | the bookable trains leaving one station (compact) |
+| `places.json` | the town or city each station is in, as a place of the [Offware shared data](https://github.com/offware-apps/data) |
 
 A search by origin, destination and date fetches `from/<origin>.json` and filters it.

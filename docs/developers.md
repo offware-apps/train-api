@@ -41,6 +41,7 @@ python3 examples/search.py renfe interrail madrid-puerta-de-atocha-almudena-gran
 | `<operator>/stations.json` | `[{ "id": "paris-intramuros", "name": "PARIS (intramuros)" }]`, sorted by name |
 | `<operator>/<pass>/from/<stationId>.json` | the trains bookable with the pass that leave one station ([compact](#compact-snapshot)) |
 | `<operator>/<pass>/all.json` | every train bookable with the pass ([compact](#compact-snapshot)); several MB for the large feeds |
+| `places.json` | the town or city each station is in ([below](#guides-and-sights)) |
 
 Operators today: `sncf`, `renfe`, `nl`, `de`, `it`, `ch`, `no`, `fi`, `ie`, with `gb` and
 `se` added once their feeds' free accounts are set up. Passes:
@@ -191,6 +192,26 @@ about page:
 The `source` field in `index.json` repeats each source and licence, so an app can build its
 credit line from it. A link back to this repository is welcome and never required. This
 table is a summary: the source's own licence text is what applies.
+
+## Guides and sights
+
+`places.json` links each station to the town or city it's in, so an app can show what to
+see there. The places come from the [Offware shared data](https://github.com/offware-apps/data),
+built from Wikidata (CC0); this file only holds the link:
+
+```json
+{
+  "placeUrl": "https://offware-apps.github.io/data/v1/places/{id}.json",
+  "license": "CC0-1.0",
+  "attribution": "Data from Wikidata (CC0). …",
+  "stations": { "sncf/lyon-intramuros": "lyon", "renfe/valencia-joaquin-sorolla": "valencia" }
+}
+```
+
+Replace `{id}` in `placeUrl` with a station's place to get its links to free guides
+(Wikivoyage, Wikipedia) and its sights. A station is matched by name, so one no place
+matched is left out. Each place names the Wikidata item it comes from: an error is fixed
+there, and reaches the shared data and this file on the next weekly build.
 
 ## Stability
 

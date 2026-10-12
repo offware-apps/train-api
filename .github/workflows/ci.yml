@@ -19,6 +19,8 @@ jobs:
       - run: npm test
       - name: Build the API from the fixtures
         run: npm run build:api -- tests/fixtures/sncf-tgvmax.sample.json --gtfs renfe=tests/fixtures/gtfs-mini --gb tests/fixtures/gb-schedule.json --from 2026-10-05
+      - name: Link the stations to places from a fixture
+        run: npm run build:places -- --index tests/fixtures/places-index.json && test -s public/v1/places.json
 
   live-feeds:
     # Operator code changes are checked against the real feeds before they publish.
