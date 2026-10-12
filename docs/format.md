@@ -74,9 +74,27 @@ All static files under `/v1/`:
 
 | Path | Content |
 |------|---------|
-| `index.json` | freshness, dates covered, and each pass with its `seatKnown`, `bookingUrl`, `note`, `trainCount` |
+| `index.json` | freshness, dates covered, and each pass with its `seatKnown`, `bookingUrl`, `note`, `fees`, `trainCount` |
 | `<operator>/stations.json` | `[{ id, name }]`; `id` is the URL slug used below |
 | `<operator>/<pass>/all.json` | every bookable train for the pass (compact) |
 | `<operator>/<pass>/from/<id>.json` | the bookable trains leaving one station (compact) |
+| `sncf/interrail/fees.json` | what an Interrail holder pays to reserve each SNCF train (see below) |
 
 A search by origin, destination and date fetches `from/<origin>.json` and filters it.
+
+## Reservation fees
+
+`sncf/interrail/fees.json` holds the pass-holder reservation fees for SNCF trains, in
+euros, 2nd class, hand-entered from
+[Interrail's fee pages](https://www.interrail.com/en/book-reservations/reservation-fees/domestic-train-reservation-fees)
+(`checked` gives the date). The pass entry in `index.json` points to it with `fees`. A
+train's fee is `{ min, max }`:
+
+1. If a stop is abroad (a whole word of `foreignStops`), the fee is `byCountry` for that
+   country. Spain has two: `fromParis` when a stop is Paris, `other` otherwise.
+2. Otherwise the train's axe (`category`) gives `byAxe`. A stretch of an international
+   train inside France is domestic.
+3. No match (SNCF coaches) means no published fee.
+
+`sncfInterrailFee` in `src/operators/interrail-fees.ts` does exactly this. The fees are
+indicative: show them as such and link the source.

@@ -45,6 +45,8 @@ export interface PassInfo {
   bookingUrl: string;
   /** Pass rules the data can't check, for clients to show. */
   note?: string;
+  /** Path of this operator's reservation fee table for the pass, when there is one. */
+  fees?: string;
 }
 
 export const PASS_INFO: Record<PassId, PassInfo> = {
