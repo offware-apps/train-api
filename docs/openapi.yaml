@@ -82,6 +82,40 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CompactSnapshot" }
         "404": { $ref: "#/components/responses/NotPublished" }
+  /sncf/interrail/fees.json:
+    get:
+      operationId: getInterrailFees
+      summary: What an Interrail holder pays to reserve each SNCF train
+      description: |
+        Indicative pass-holder fees in euros, 2nd class, from Interrail's fee pages. A stop
+        abroad sets the fee for its country (`byCountry`, matched on whole words of
+        `foreignStops`); otherwise the train's axe does (`byAxe`). See docs/format.md.
+      responses:
+        "200":
+          description: Fee table.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [currency, class, checked, source, byCountry, byAxe, foreignStops]
+                properties:
+                  currency: { type: string, const: EUR }
+                  class: { type: integer, const: 2 }
+                  checked: { $ref: "#/components/schemas/Date" }
+                  source: { type: string, format: uri }
+                  note: { type: string }
+                  byCountry: { type: object }
+                  byAxe:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      required: [min, max]
+                      properties:
+                        min: { type: number }
+                        max: { type: number }
+                  foreignStops:
+                    type: object
+                    additionalProperties: { type: array, items: { type: string } }
   /archive/max/{year}/{date}.json.gz:
     servers:
       - url: https://raw.githubusercontent.com/offware-apps/train-api/data
@@ -203,6 +237,10 @@ components:
         note:
           type: string
           description: Pass rules the data can't check. Show it to your users.
+        fees:
+          type: string
+          description: Path of the operator's reservation fee table for this pass, when there is one.
+          examples: [v1/sncf/interrail/fees.json]
         trainCount:
           type: integer
           minimum: 0

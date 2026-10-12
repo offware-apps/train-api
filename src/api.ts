@@ -1,6 +1,7 @@
 import { encodeCompact } from "./compact";
 import { PASSES, PASS_INFO, type PassId, type PassInfo, type Train } from "./format";
 import { INTERRAIL_BY_OPERATOR } from "./operators/interrail";
+import { sncfFeeTable } from "./operators/interrail-fees";
 
 /**
  * The static API: plain JSON files, so it can be hosted for free and never needs a
@@ -10,6 +11,7 @@ import { INTERRAIL_BY_OPERATOR } from "./operators/interrail";
  *   <operator>/stations.json            [{ id, name }] — id is the URL slug
  *   <operator>/<pass>/all.json          every bookable train, compact snapshot
  *   <operator>/<pass>/from/<id>.json    the trains leaving one station, compact snapshot
+ *   sncf/interrail/fees.json            what a pass holder pays to reserve each SNCF train
  *
  * Search by origin, destination and date = fetch `from/<origin>.json` and filter.
  */
@@ -71,7 +73,9 @@ export function buildOperatorApi(
     const ok = bookableFor(trains, pass);
     if (ok.length === 0) continue;
     const own = pass === "interrail" ? INTERRAIL_BY_OPERATOR[operator] : undefined;
-    passes.push({ ...PASS_INFO[pass], ...own, trainCount: ok.length });
+    const fees = operator === "sncf" && pass === "interrail" ? `v1/${operator}/${pass}/fees.json` : undefined;
+    passes.push({ ...PASS_INFO[pass], ...own, ...(fees ? { fees } : {}), trainCount: ok.length });
+    if (fees) files.push({ path: fees, body: sncfFeeTable() });
     files.push({ path: `v1/${operator}/${pass}/all.json`, body: encodeCompact(ok) });
     const byOrigin = new Map<string, Train[]>();
     for (const t of ok) {
