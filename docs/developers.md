@@ -61,6 +61,13 @@ Each row is one train between two of its stops, so a train Paris → Lyon → Ma
 up as Paris → Lyon, Paris → Marseille and Lyon → Marseille. Trips that change trains, or
 change operators, aren't joined.
 
+### Trip bundles (`/v2/`, preview)
+
+To search across changes and operators on the client, offline included, download one
+bundle per operator from `/v2/` instead: each train's run once with every stop, the
+stations' coordinates, and each file's size in `/v2/index.json`. The format is in
+[format.md](format.md#trip-bundles-v2-preview); it may still change until announced stable.
+
 ## Compact snapshot
 
 Timetable files store each service once with a bitmask of the dates it runs on:
@@ -214,7 +221,7 @@ The whole API is a build step, so you can run your own copy, on your own schedul
 
 ```sh
 git clone https://github.com/offware-apps/train-api && cd train-api
-npm ci && npm run fetch && npm run build:api   # writes public/v1/
+npm ci && npm run fetch && npm run build:api   # writes public/v1/ and public/v2/
 ```
 
 The national feeds need about 12 GB of memory (`NODE_OPTIONS=--max-old-space-size=12288`).

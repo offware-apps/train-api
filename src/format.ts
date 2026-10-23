@@ -71,3 +71,26 @@ export const PASS_INFO: Record<PassId, PassInfo> = {
     note: "Reservation rules depend on the operator and the train. A Global Pass covers only one outbound and one return trip inside your country of residence.",
   },
 };
+
+/**
+ * One train's whole run, every stop in order, on the dates it runs: the v2 shape
+ * (docs/format.md). A `Train` is one pair of these stops on one date.
+ */
+export interface Trip {
+  operator: string;
+  trainNo: string;
+  category?: string;
+  /** Service days, "YYYY-MM-DD": the day the stop times count from. */
+  dates: string[];
+  /** Minutes after midnight of the service day; past 1440 is the next day. */
+  stops: { station: string; arr: number; dep: number }[];
+  passes: Partial<Record<PassId, PassAvailability>>;
+}
+
+/** What a source reads into: rows for v1, trips for v2, and where its stations are. */
+export interface Timetable {
+  trains: Train[];
+  trips: Trip[];
+  /** Station name → [latitude, longitude], when the source publishes it. */
+  coords: Map<string, [number, number]>;
+}

@@ -8,7 +8,7 @@
 import { createReadStream, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import type { PassAvailability, PassId, Train } from "./format";
+import type { PassAvailability, PassId, Timetable, Train, Trip } from "./format";
 
 /** One CSV line → fields. Handles quoted fields and doubled quotes; trims padding. */
 export function parseCsvLine(line: string): string[] {
@@ -209,12 +209,38 @@ export function pushStopPairs(
   }
 }
 
-/**
- * Read one operator's GTFS directory into trains running in [from, from + days).
- * The train number is the trip's short name, or the route's when the feed gives none
- * (some feeds only name the line, others put the train number there).
- */
+/** One trip for v2: the calls as they are, the dates it runs sorted. */
+export function tripOf(
+  operator: string,
+  calls: Call[],
+  runs: Iterable<string>,
+  trainNo: string,
+  category: string,
+  passes: Partial<Record<PassId, PassAvailability>>,
+): Trip {
+  return {
+    operator,
+    trainNo,
+    category,
+    dates: [...runs].sort(),
+    stops: calls.map((c) => ({ station: c.station, arr: c.arr, dep: c.dep })),
+    passes,
+  };
+}
+
+/** Read one operator's GTFS directory into trains running in [from, from + days). */
 export async function readGtfs(dir: string, op: GtfsOperator, from: string, days = 31): Promise<Train[]> {
+  return (await readGtfsTimetable(dir, op, from, days)).trains;
+}
+
+/**
+ * Read one operator's GTFS directory into rows (v1), trips (v2) and station coordinates,
+ * for trains running in [from, from + days). The train number is the trip's short name,
+ * or the route's when the feed gives none (some feeds only name the line, others put the
+ * train number there). v1 cuts the `narrow` families to the long-distance stations to
+ * keep its stop pairs few; v2 keeps every stop, since a trip costs one entry per stop.
+ */
+export async function readGtfsTimetable(dir: string, op: GtfsOperator, from: string, days = 31): Promise<Timetable> {
   const agencies = new Map<string, string>();
   await readTable(dir, "agency", (r) => agencies.set(r.agency_id ?? "", r.agency_name ?? ""));
   const onlyAgency = agencies.size === 1 ? [...agencies.values()][0] ?? "" : "";
@@ -239,11 +265,17 @@ export async function readGtfs(dir: string, op: GtfsOperator, from: string, days
   // Platforms roll up to their station (parent_station), named after the station.
   const names = new Map<string, string>();
   const parents = new Map<string, string>();
+  const at = new Map<string, [number, number]>();
   await readTable(dir, "stops", (r) => {
-    names.set(r.stop_id ?? "", r.stop_name ?? "");
-    if (r.parent_station) parents.set(r.stop_id ?? "", r.parent_station);
+    const id = r.stop_id ?? "";
+    names.set(id, r.stop_name ?? "");
+    if (r.parent_station) parents.set(id, r.parent_station);
+    const lat = Number(r.stop_lat);
+    const lon = Number(r.stop_lon);
+    if (r.stop_lat && r.stop_lon && Number.isFinite(lat) && Number.isFinite(lon) && (lat || lon)) at.set(id, [lat, lon]);
   });
   const stationOf = (stop: string): string => names.get(parents.get(stop) ?? stop) ?? names.get(stop) ?? "";
+  const coords = new Map<string, [number, number]>();
 
   const calls = new Map<string, Call[]>();
   await readTable(
@@ -254,8 +286,15 @@ export async function readGtfs(dir: string, op: GtfsOperator, from: string, days
       const arr = gtfsMinutes(r.arrival_time || r.departure_time || "");
       const dep = gtfsMinutes(r.departure_time || r.arrival_time || "");
       if (Number.isNaN(arr) || Number.isNaN(dep)) return;
+      const stop = r.stop_id ?? "";
+      const station = stationOf(stop);
+      // A station's place is its own, else its first platform's.
+      if (station && !coords.has(station)) {
+        const p = at.get(parents.get(stop) ?? stop) ?? at.get(stop);
+        if (p) coords.set(station, p);
+      }
       const list = calls.get(trip) ?? [];
-      list.push({ seq: Number(r.stop_sequence), station: stationOf(r.stop_id ?? ""), arr, dep });
+      list.push({ seq: Number(r.stop_sequence), station, arr, dep });
       calls.set(trip, list);
     },
     { column: "trip_id", keep: (id) => trips.has(id) },
@@ -270,13 +309,16 @@ export async function readGtfs(dir: string, op: GtfsOperator, from: string, days
   }
   const str = interner();
   const out: Train[] = [];
+  const whole: Trip[] = [];
   for (const [tripId, trip] of trips) {
     const list = calls.get(tripId);
     if (!list) continue;
     list.sort((a, b) => a.seq - b.seq);
-    const narrow = op.narrow?.(trip.family) ?? false;
-    const keep = list.filter((c, i) => c.station && c.station !== list[i - 1]?.station && (!narrow || wide.has(c.station)));
-    pushStopPairs(out, str, op.id, keep, trip.runs, trip.trainNo, trip.family, op.passes(trip.family));
+    const passes = op.passes(trip.family);
+    const all = list.filter((c, i) => c.station && c.station !== list[i - 1]?.station);
+    if (all.length >= 2) whole.push(tripOf(op.id, all, trip.runs, str(trip.trainNo), str(trip.family), passes));
+    const keep = op.narrow?.(trip.family) ? all.filter((c) => wide.has(c.station)) : all;
+    pushStopPairs(out, str, op.id, keep, trip.runs, trip.trainNo, trip.family, passes);
   }
-  return out;
+  return { trains: out, trips: whole, coords };
 }

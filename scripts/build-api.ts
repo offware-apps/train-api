@@ -9,11 +9,20 @@
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { buildIndex, buildOperatorApi, type ApiFile, type ApiIndex } from "../src/api";
-import type { Train } from "../src/format";
-import { readGtfs } from "../src/gtfs";
+import {
+  buildIndex,
+  buildIndexV2,
+  buildOperatorApi,
+  buildOperatorBundles,
+  tripsFromTrains,
+  type ApiFile,
+  type ApiIndex,
+  type ApiIndexV2,
+} from "../src/api";
+import type { Timetable } from "../src/format";
+import { readGtfsTimetable } from "../src/gtfs";
 import { GTFS_OPERATORS } from "../src/operators";
-import { GB_SOURCE, readNetworkRail } from "../src/operators/gb";
+import { GB_SOURCE, readNetworkRailTimetable } from "../src/operators/gb";
 import { mapSncfFeed } from "../src/operators/sncf";
 
 const args = process.argv.slice(2);
@@ -32,10 +41,12 @@ for (let i = 0; i < args.length; i++) {
 }
 const outDir = resolve("public");
 const entries: ApiIndex["operators"] = [];
+const entriesV2: ApiIndexV2["operators"] = [];
 const counts: string[] = [];
 let fileCount = 0;
 let bytes = 0;
 rmSync(join(outDir, "v1"), { recursive: true, force: true });
+rmSync(join(outDir, "v2"), { recursive: true, force: true });
 
 /** Written as each operator is built, so the largest feeds never sit in memory together. */
 function write(files: ApiFile[]): number {
@@ -52,17 +63,26 @@ function write(files: ApiFile[]): number {
   return size;
 }
 
-function publish(id: string, source: string, trains: Train[]): void {
+function publish(id: string, source: string, { trains, trips, coords }: Timetable): void {
   const built = buildOperatorApi(id, source, trains);
   const size = write(built.files);
   entries.push(built.entry);
-  console.log(`[build-api] ${id}: ${built.files.length} files, ${(size / 1e6).toFixed(1)} MB`);
+  const v2 = buildOperatorBundles(id, source, trips, coords);
+  const sizeV2 = write(v2.files);
+  entriesV2.push(v2.entry);
+  console.log(
+    `[build-api] ${id}: v1 ${built.files.length} files, ${(size / 1e6).toFixed(1)} MB; ` +
+      `v2 ${(sizeV2 / 1e6).toFixed(1)} MB, ${v2.entry.locatedCount}/${v2.entry.stationCount} stations located`,
+  );
 }
 
 const feedPath = resolve(feedArg ?? "data/raw/sncf-tgvmax.json");
 if (existsSync(feedPath)) {
   const raw: unknown = JSON.parse(readFileSync(feedPath, "utf-8"));
-  if (Array.isArray(raw) && raw.length > 0) publish("sncf", "SNCF Open Data — tgvmax (Licence Ouverte)", mapSncfFeed(raw));
+  if (Array.isArray(raw) && raw.length > 0) {
+    const trains = mapSncfFeed(raw);
+    publish("sncf", "SNCF Open Data — tgvmax (Licence Ouverte)", { trains, trips: tripsFromTrains(trains), coords: new Map() });
+  }
   else console.error(`[build-api] ${feedPath} is not a non-empty array; SNCF left out.`);
 } else console.error(`[build-api] no SNCF feed at ${feedPath}; SNCF left out.`);
 
@@ -72,19 +92,19 @@ for (const { op } of GTFS_OPERATORS) {
     if (gtfsDirs.size === 0 || gtfsDirs.has(op.id)) console.error(`[build-api] no ${op.id} feed at ${dir}; left out.`);
     continue;
   }
-  const trains = await readGtfs(dir, op, from);
-  if (trains.length === 0) {
+  const timetable = await readGtfsTimetable(dir, op, from);
+  if (timetable.trains.length === 0) {
     console.error(`[build-api] ${op.id}: no trains from ${from}; left out.`);
     continue;
   }
-  publish(op.id, op.source, trains);
+  publish(op.id, op.source, timetable);
 }
 
 // Great Britain: Network Rail's SCHEDULE extract, when `npm run fetch` had the account to get it.
 const gbPath = gbArg ?? ["gb-schedule.json.gz", "gb-schedule.json"].map((f) => resolve("data/raw", f)).find((p) => existsSync(p));
 if (gbPath) {
-  const trains = await readNetworkRail(gbPath, from);
-  if (trains.length > 0) publish("gb", GB_SOURCE, trains);
+  const timetable = await readNetworkRailTimetable(gbPath, from);
+  if (timetable.trains.length > 0) publish("gb", GB_SOURCE, timetable);
   else console.error(`[build-api] gb: no trains from ${from}; left out.`);
 }
 
@@ -92,7 +112,8 @@ if (entries.length === 0) {
   console.error("[build-api] no source to publish.");
   process.exit(1);
 }
-write([buildIndex(new Date().toISOString(), entries)]);
+const updatedAt = new Date().toISOString();
+write([buildIndex(updatedAt, entries), buildIndexV2(updatedAt, entriesV2)]);
 console.log(`[build-api] ${fileCount} files, ${(bytes / 1e6).toFixed(1)} MB in ${outDir}`);
 for (const e of entries) {
   for (const p of e.passes) counts.push(`${e.id}/${p.id}: ${p.trainCount} trains, ${e.stationCount} stations`);

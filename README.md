@@ -42,7 +42,9 @@ Free, no key, CORS open, refreshed daily: start with the [developer guide](docs/
    TGV INOUI and Intercités train for ~30 days) and each GTFS operator's zip, unzipped.
 2. `npm run build:api` maps it to the [open train format](docs/format.md) and writes the
    static API to `public/v1/` in the compact snapshot format: each service is stored once
-   with the dates it runs, about 20x smaller than the raw rows.
+   with the dates it runs, about 20x smaller than the raw rows. It also writes trip bundles
+   to `public/v2/` (preview): each train's whole run once, with the stations' coordinates,
+   one file per operator to download and search offline.
 3. The **Publish API** workflow does both daily and deploys `public/` to GitHub Pages.
    There is no server and no cost.
 
