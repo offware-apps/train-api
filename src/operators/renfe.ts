@@ -5,6 +5,8 @@ export const RENFE_GTFS_URL = "https://ssl.renfe.com/gtransit/Fichero_AV_LD/goog
 
 /** Renfe's low-cost brand, which doesn't take Interrail passes. */
 const NOT_INTERRAIL = new Set(["AVLO"]);
+/** Media Distancia and regional trains: kept between the long-distance stations only. */
+const REGIONAL = new Set(["MD", "REGIONAL", "REG.EXP."]);
 
 export const RENFE: GtfsOperator = {
   id: "renfe",
@@ -13,6 +15,7 @@ export const RENFE: GtfsOperator = {
     const family = (r.route_short_name ?? "").trim();
     return r.route_type === "2" && family && !NOT_INTERRAIL.has(family.toUpperCase()) ? family : null;
   },
+  narrow: (f) => REGIONAL.has(f.toUpperCase()),
   // Most of these trains need a paid pass-holder reservation; no open data says whether one is left.
   passes: () => ({ interrail: { bookable: true, seat: "unknown" } }),
 };
