@@ -57,6 +57,11 @@ describe("GTFS reading", () => {
   it("keeps only the window asked for", async () => {
     expect(await readGtfs(DIR, RENFE, "2026-11-01", 7)).toEqual([]);
   });
+
+  it("keeps Renfe's regional trains between long-distance stations only", () => {
+    for (const f of ["MD", "REGIONAL", "REG.EXP."]) expect(RENFE.narrow?.(f)).toBe(true);
+    for (const f of ["AVE", "AVE INT", "ALVIA", "EUROMED", "Intercity", "AVANT"]) expect(RENFE.narrow?.(f)).toBe(false);
+  });
 });
 
 describe("Dutch operator", () => {

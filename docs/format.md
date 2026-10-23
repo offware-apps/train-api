@@ -39,7 +39,7 @@ midnight is dated the next day. Renfe leaves out AVLO, which doesn't take Interr
 Dutch feed keeps international and long-distance trains (Eurostar, ICE, EuroCity,
 Intercity direct, Nightjet) at every stop, and domestic Intercity trains only between the
 stations those serve. The other national feeds work the same way: long-distance families
-at every stop, regional ones (Italy's REG and RV, Switzerland's IR and RE, Norway's R/RE/RX,
+at every stop, regional ones (Spain's MD, Regional and Regional Exprés, Italy's REG and RV, Switzerland's IR and RE, Norway's R/RE/RX,
 Finland's H, Ireland's commuter lines) only between the long-distance stations, and
 suburban lines, charters and trains that don't take Interrail (Flytoget, the DART,
 panoramic trains) left out. `trainNo` is the trip's number, or the route's short name when
