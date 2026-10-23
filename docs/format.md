@@ -80,3 +80,39 @@ All static files under `/v1/`:
 | `<operator>/<pass>/from/<id>.json` | the bookable trains leaving one station (compact) |
 
 A search by origin, destination and date fetches `from/<origin>.json` and filters it.
+
+## Trip bundles (v2, preview)
+
+v1 publishes one row per pair of stops, so a train calling at n stations costs n(n-1)/2
+rows and the national files grow fast (Finland's `all.json` is over 20 MB). v2 publishes
+each train's run once, every stop in order, in one file per operator and pass that a
+client downloads once and searches offline, changes included. `src/bundle.ts` encodes and
+decodes it and has no imports, so clients can copy it.
+
+```json
+{ "v": 2, "operator": "renfe", "pass": "interrail",
+  "dates": ["2026-10-05", "..."],
+  "stations": [["Madrid-Puerta de Atocha-Almudena Grandes", 40.40, -3.69], "..."],
+  "families": ["AVE", "..."],
+  "trips": [["03063", familyIdx or -1, "dateMask", [stationIdx, ...], [arr0, dep0, arr1, dep1, ...]]] }
+```
+
+- `dates` are service days, and `dateMask` reads as in v1.
+- Stop times are minutes after midnight of the service day; past 1440 is the next day.
+  For stop i, element 2i is the arrival and 2i+1 the departure.
+- `stations` carry `[name, lat, lon]`, from the feed's `stop_lat`/`stop_lon` (a platform's
+  station takes the station's own position). They are `null` where the source has none:
+  SNCF's `tgvmax` and Network Rail's SCHEDULE.
+- GTFS operators keep every stop of every kept train: the `narrow` rule of v1 is not
+  applied, since a stop costs one entry here. Sources without stop lists (SNCF's
+  `tgvmax`) ship each row as a two-stop trip.
+
+| Path (under `/v2/`) | Content |
+|------|---------|
+| `index.json` | freshness, and per operator `dates`, `stationCount`, `locatedCount` (stations with coordinates), and each pass with its `seatKnown`, `bookingUrl`, `note`, `tripCount` and `bytes` (the bundle's size) |
+| `<operator>/stations.json` | `[[name, lat, lon], …]` sorted by name, to list every station before downloading a bundle |
+| `<operator>/<pass>.json` | the operator's trips for the pass |
+
+v2 is a preview: its shape may still change until it is announced stable. v1 keeps being
+published alongside it.
+

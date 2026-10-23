@@ -1,5 +1,6 @@
+import { encodeBundle, type BundleStation } from "./bundle";
 import { encodeCompact } from "./compact";
-import { PASSES, PASS_INFO, type PassId, type PassInfo, type Train } from "./format";
+import { PASSES, PASS_INFO, type PassId, type PassInfo, type Train, type Trip } from "./format";
 import { INTERRAIL_BY_OPERATOR } from "./operators/interrail";
 
 /**
@@ -90,4 +91,85 @@ export function buildOperatorApi(
 export function buildIndex(updatedAt: string, operators: ApiIndex["operators"]): ApiFile {
   const body: ApiIndex = { version: 1, updatedAt, operators };
   return { path: "v1/index.json", body };
+}
+
+/**
+ * The v2 files: per operator, one trip bundle per pass (`<operator>/<pass>.json`) and its
+ * stations with their coordinates (`<operator>/stations.json`), so a client can show every
+ * station before downloading any bundle. Layout (all under /v2/):
+ *
+ *   index.json                 what is published, how fresh, each bundle's size
+ *   <operator>/stations.json   [[name, lat | null, lon | null], …]
+ *   <operator>/<pass>.json     the operator's trips for the pass (src/bundle.ts)
+ */
+export interface ApiIndexV2 {
+  version: 2;
+  updatedAt: string;
+  operators: {
+    id: string;
+    source: string;
+    dates: string[];
+    stationCount: number;
+    /** Stations with coordinates. */
+    locatedCount: number;
+    passes: (PassInfo & { tripCount: number; bytes: number })[];
+  }[];
+}
+
+function minutesOf(hhmm: string): number {
+  return Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+}
+
+/** v1 rows as two-stop trips, for a source with no stop lists (SNCF's tgvmax). */
+export function tripsFromTrains(trains: Train[]): Trip[] {
+  return trains.map((t) => {
+    const dep = minutesOf(t.depart);
+    let arr = minutesOf(t.arrive);
+    if (arr < dep) arr += 1440;
+    const trip: Trip = {
+      operator: t.operator,
+      trainNo: t.trainNo,
+      dates: [t.date],
+      stops: [
+        { station: t.origin, arr: dep, dep },
+        { station: t.destination, arr, dep: arr },
+      ],
+      passes: t.passes,
+    };
+    if (t.category) trip.category = t.category;
+    return trip;
+  });
+}
+
+/** Build the v2 files for one operator's trips. */
+export function buildOperatorBundles(
+  operator: string,
+  source: string,
+  trips: Trip[],
+  coords: Map<string, [number, number]>,
+): { files: ApiFile[]; entry: ApiIndexV2["operators"][number] } {
+  const files: ApiFile[] = [];
+  const passes: ApiIndexV2["operators"][number]["passes"] = [];
+  const stations = new Map<string, BundleStation>();
+  for (const pass of PASSES) {
+    const ok = trips.filter((t) => t.passes[pass]?.bookable);
+    if (ok.length === 0) continue;
+    const body = encodeBundle(operator, pass, ok, coords);
+    for (const s of body.stations) stations.set(s[0], s);
+    const own = pass === "interrail" ? INTERRAIL_BY_OPERATOR[operator] : undefined;
+    passes.push({ ...PASS_INFO[pass], ...own, tripCount: body.trips.length, bytes: JSON.stringify(body).length });
+    files.push({ path: `v2/${operator}/${pass}.json`, body });
+  }
+  const list = [...stations.values()].sort((a, b) => a[0].localeCompare(b[0]));
+  files.push({ path: `v2/${operator}/stations.json`, body: list });
+  const dates = [...new Set(trips.flatMap((t) => t.dates))].sort();
+  return {
+    files,
+    entry: { id: operator, source, dates, stationCount: list.length, locatedCount: list.filter((s) => s[1] !== null).length, passes },
+  };
+}
+
+export function buildIndexV2(updatedAt: string, operators: ApiIndexV2["operators"]): ApiFile {
+  const body: ApiIndexV2 = { version: 2, updatedAt, operators };
+  return { path: "v2/index.json", body };
 }

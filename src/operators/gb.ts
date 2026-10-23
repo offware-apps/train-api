@@ -10,8 +10,8 @@
 import { createReadStream, existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { createGunzip } from "node:zlib";
-import type { PassAvailability, PassId, Train } from "../format";
-import { addDays, interner, pushStopPairs, type Call } from "../gtfs";
+import type { PassAvailability, PassId, Timetable, Train, Trip } from "../format";
+import { addDays, interner, pushStopPairs, tripOf, type Call } from "../gtfs";
 
 export const NETWORK_RAIL_URL =
   "https://publicdatafeeds.networkrail.co.uk/ntrod/CifFileAuthenticate?type=CIF_ALL_FULL_DAILY&day=toc-full";
@@ -115,7 +115,13 @@ const STP_RANK: Record<string, number> = { C: 0, N: 1, O: 1, P: 2 };
 
 /** Read the gzipped (or plain) SCHEDULE extract into trains running in [from, from + days). */
 export async function readNetworkRail(path: string, from: string, days = 31): Promise<Train[]> {
-  if (!existsSync(path)) return [];
+  return (await readNetworkRailTimetable(path, from, days)).trains;
+}
+
+/** As `readNetworkRail`, with each train's whole run for v2. SCHEDULE has no coordinates. */
+export async function readNetworkRailTimetable(path: string, from: string, days = 31): Promise<Timetable> {
+  const empty: Timetable = { trains: [], trips: [], coords: new Map() };
+  if (!existsSync(path)) return empty;
   const raw = createReadStream(path);
   const input = path.endsWith(".gz") ? raw.pipe(createGunzip()) : raw;
   const names = new Map<string, string>();
@@ -158,6 +164,7 @@ export async function readNetworkRail(path: string, from: string, days = 31): Pr
   const window = Array.from({ length: days }, (_, i) => addDays(from, i));
   const str = interner();
   const out: Train[] = [];
+  const trips: Trip[] = [];
   for (const schedules of byUid.values()) {
     // The dates each schedule is the one in force on.
     const runs = new Map<Schedule, string[]>();
@@ -174,8 +181,10 @@ export async function readNetworkRail(path: string, from: string, days = 31): Pr
     for (const [s, dates] of runs) {
       const calls: Call[] = s.calls.map((c, i) => ({ seq: i, station: names.get(c.tiploc) ?? c.tiploc, arr: c.arr, dep: c.dep }));
       const kept = calls.filter((c, i) => c.station !== calls[i - 1]?.station);
-      pushStopPairs(out, str, "gb", kept, dates, s.trainNo, OPERATORS[s.operator] ?? s.operator, PASSES);
+      const category = OPERATORS[s.operator] ?? s.operator;
+      pushStopPairs(out, str, "gb", kept, dates, s.trainNo, category, PASSES);
+      if (kept.length >= 2) trips.push(tripOf("gb", kept, dates, str(s.trainNo), str(category), PASSES));
     }
   }
-  return out;
+  return { trains: out, trips, coords: empty.coords };
 }
