@@ -101,9 +101,10 @@ export interface GtfsOperator {
 }
 
 /** Stations of one name further apart than this are different places sharing the name. */
-const SAME_NAME_APART_KM = 3;
+export const SAME_NAME_APART_KM = 3;
 
-function km(a: [number, number], b: [number, number]): number {
+/** Kilometres between two [lat, lon], close enough at station scale. */
+export function km(a: [number, number], b: [number, number]): number {
   const rad = Math.PI / 180;
   const x = (b[1] - a[1]) * rad * Math.cos(((a[0] + b[0]) / 2) * rad);
   const y = (b[0] - a[0]) * rad;
@@ -291,12 +292,12 @@ export async function readGtfsTimetable(
     const lon = Number(r.stop_lon);
     if (r.stop_lat && r.stop_lon && Number.isFinite(lat) && Number.isFinite(lon) && (lat || lon)) at.set(id, [lat, lon]);
   });
-  const stationOf = (stop: string): string => names.get(parents.get(stop) ?? stop) ?? names.get(stop) ?? "";
   const coords = new Map<string, [number, number]>();
 
+  // Calls hold the station's id first; it becomes the station's name below.
   const calls = new Map<string, Call[]>();
-  // Each name's stations and where they are: one name can stand for stations in different towns.
-  const positions = new Map<string, Map<string, [number, number]>>();
+  // Each station used, with where it is: its own position, else its first platform's.
+  const used = new Map<string, [number, number] | undefined>();
   await readTable(
     dir,
     "stop_times",
@@ -306,25 +307,42 @@ export async function readGtfsTimetable(
       const dep = gtfsMinutes(r.departure_time || r.arrival_time || "");
       if (Number.isNaN(arr) || Number.isNaN(dep)) return;
       const stop = r.stop_id ?? "";
-      const station = stationOf(stop);
-      // A station's place is its own, else its first platform's.
-      if (station && !coords.has(station)) {
-        const p = at.get(parents.get(stop) ?? stop) ?? at.get(stop);
-        if (p) coords.set(station, p);
-      }
-      if (station) {
-        const id = parents.get(stop) ?? stop;
-        const p = at.get(id) ?? at.get(stop);
-        const seen = positions.get(station) ?? new Map<string, [number, number]>();
-        if (p && !seen.has(id)) seen.set(id, p);
-        positions.set(station, seen);
-      }
+      const id = parents.get(stop) ?? stop;
+      if (!used.get(id)) used.set(id, at.get(id) ?? at.get(stop));
       const list = calls.get(trip) ?? [];
-      list.push({ seq: Number(r.stop_sequence), station, arr, dep });
+      list.push({ seq: Number(r.stop_sequence), station: id, arr, dep });
       calls.set(trip, list);
     },
     { column: "trip_id", keep: (id) => trips.has(id) },
   );
+
+  // One name can stand for stations in different towns ("Gare SNCF"): each place after
+  // the first takes a number, "Gare SNCF (2)", so trips don't jump between towns.
+  const byName = new Map<string, { at: [number, number]; label: string }[]>();
+  const label = new Map<string, string>();
+  for (const [id, p] of used) {
+    const name = names.get(id) ?? "";
+    if (!name) {
+      label.set(id, "");
+      continue;
+    }
+    const places = byName.get(name) ?? [];
+    byName.set(name, places);
+    const near = p ? places.find((q) => km(p, q.at) <= SAME_NAME_APART_KM) : places[0];
+    if (near) {
+      label.set(id, near.label);
+      continue;
+    }
+    const own = places.length === 0 ? name : `${name} (${places.length + 1})`;
+    label.set(id, own);
+    if (p) {
+      places.push({ at: p, label: own });
+      coords.set(own, p);
+    }
+  }
+  for (const list of calls.values()) for (const c of list) c.station = label.get(c.station) ?? "";
+  const sameName = new Map<string, [number, number][]>();
+  for (const [name, places] of byName) if (places.length > 1) sameName.set(name, places.map((q) => q.at));
 
   const wide = new Set<string>();
   if (op.narrow) {
@@ -347,12 +365,6 @@ export async function readGtfsTimetable(
     if (opts.v1 === false) continue;
     const keep = op.narrow?.(trip.family) ? all.filter((c) => wide.has(c.station)) : all;
     pushStopPairs(out, str, op.id, keep, trip.runs, trip.trainNo, trip.family, passes);
-  }
-  const sameName = new Map<string, [number, number][]>();
-  for (const [name, seen] of positions) {
-    const spots: [number, number][] = [];
-    for (const p of seen.values()) if (spots.every((q) => km(p, q) > SAME_NAME_APART_KM)) spots.push(p);
-    if (spots.length > 1) sameName.set(name, spots);
   }
   return { trains: out, trips: whole, coords, sameName };
 }

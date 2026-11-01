@@ -19,8 +19,9 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { gzipSync } from "node:zlib";
 import { encodeBundle, type Bundle } from "../src/bundle";
-import type { Trip } from "../src/format";
 import { addDays, readGtfsTimetable, type GtfsOperator } from "../src/gtfs";
+import type { Timetable } from "../src/format";
+import { mergeTimetables } from "../src/merge";
 import { Network } from "../src/search";
 
 const MIRROR = "https://api.transitous.org/gtfs/";
@@ -79,11 +80,6 @@ function countryOf(file: string): string | null {
   return c && c in COUNTRIES ? c : null;
 }
 
-function km(a: [number, number], b: [number, number]): number {
-  const rad = Math.PI / 180;
-  return 6371 * Math.hypot((b[1] - a[1]) * rad * Math.cos(((a[0] + b[0]) / 2) * rad), (b[0] - a[0]) * rad);
-}
-
 const mb = (n: number): string => (n / 1e6).toFixed(1);
 const secs = (ms: number): string => (ms / 1000).toFixed(1);
 
@@ -137,15 +133,7 @@ const feeds: FeedRow[] = [];
 const summary: { country: string; shared: number; sharedExamples: string; feeds: number; trips: number; variants: number; stations: number; located: number; bytes: number; gz: number }[] = [];
 const t0 = Date.now();
 for (const [country, list] of [...byCountry].sort()) {
-  const trips: Trip[] = [];
-  const coords = new Map<string, [number, number]>();
-  // Every position each station name stands for, across the country's feeds.
-  const spots = new Map<string, [number, number][]>();
-  const addSpot = (name: string, p: [number, number]): void => {
-    const list = spots.get(name) ?? [];
-    if (list.every((q) => km(p, q) > 3)) list.push(p);
-    spots.set(name, list);
-  };
+  const read: Timetable[] = [];
   for (const src of list) {
     const file = src.split("/").pop() as string;
     const row: FeedRow = { file, country, zipBytes: 0, trips: 0, readMs: 0 };
@@ -166,10 +154,7 @@ for (const [country, list] of [...byCountry].sort()) {
       const tt = await readGtfsTimetable(dir, rail(country), from, DAYS, { v1: false });
       row.readMs = Date.now() - t;
       row.trips = tt.trips.length;
-      for (const trip of tt.trips) trips.push(trip);
-      for (const [name, at] of tt.coords) if (!coords.has(name)) coords.set(name, at);
-      for (const [name, at] of tt.coords) addSpot(name, at);
-      for (const [name, all] of tt.sameName ?? []) for (const p of all) addSpot(name, p);
+      read.push(tt);
     } catch (err) {
       row.error = String(err).slice(0, 200);
     } finally {
@@ -180,11 +165,14 @@ for (const [country, list] of [...byCountry].sort()) {
       `[probe] ${country} ${file}: ${mb(row.zipBytes)} MB zip, ${row.trips} rail trips, read in ${secs(row.readMs)} s${row.error ? `, FAILED ${row.error}` : ""}`,
     );
   }
+  const { trips, coords, sameName } = mergeTimetables(read);
+  read.length = 0;
   if (trips.length === 0) continue;
   const bundle = encodeBundle(country, "interrail", trips, coords);
   const json = JSON.stringify(bundle);
   writeFileSync(join(OUT, `${country}.json`), json);
-  const shared = [...spots].filter(([, l]) => l.length > 1).sort((a, b) => b[1].length - a[1].length);
+  // Names that stand for stations in different towns, now told apart.
+  const shared = [...(sameName ?? [])].sort((a, b) => b[1].length - a[1].length);
   const row = {
     country,
     shared: shared.length,
@@ -231,6 +219,9 @@ const PAIRS: [string, string][] = process.env.PROBE_PAIRS
   ["München", "Garmisch-Partenkirchen"],
 ];
 const searches: string[] = [];
+// The place a name resolved to, with a few of its stations, to check the lookup.
+const seenAs = (m: NonNullable<ReturnType<Network["resolve"]>>): string =>
+  `${m.name} [${m.places.flatMap((i) => net.places[i]?.stations.map((s) => `${s.operator}:${s.name}`) ?? []).slice(0, 4).join("; ")}]`;
 for (const [a, b] of PAIRS) {
   const from = net.resolve(a);
   const to = net.resolve(b);
@@ -247,7 +238,7 @@ for (const [a, b] of PAIRS) {
   }
   const best = found.reduce<(typeof found)[number] | undefined>((x, j) => (!x || j.duration < x.duration ? j : x), undefined);
   const route = best ? `${Math.floor(best.duration / 60)}h${String(best.duration % 60).padStart(2, "0")}, ${best.legs.length} trains` : "none";
-  searches.push(`| ${from.name} → ${to.name} | ${found.length} | ${route} | ${times[0]} ms | ${times[1]} ms |`);
+  searches.push(`| ${a} → ${b}: ${seenAs(from)} → ${seenAs(to)} | ${found.length} | ${route} | ${times[0]} ms | ${times[1]} ms |`);
 }
 const firstDay = (() => {
   const t = Date.now();
@@ -273,7 +264,7 @@ const lines = [
   "",
   `${feeds.length} feeds read in ${secs(readAll)} s; ${feeds.filter((f) => f.error).length} failed.`,
   "",
-  "| Country | Feeds | Trips | Stations (located) | Bundle MB | Gzipped MB | Names shared by distant stations |",
+  "| Country | Feeds | Trips | Stations (located) | Bundle MB | Gzipped MB | Names told apart (towns) |",
   "|---|---|---|---|---|---|---|",
   ...summary.map(
     (s) => `| ${COUNTRIES[s.country]} | ${s.feeds} | ${s.variants} | ${s.stations} (${s.located}) | ${mb(s.bytes)} | ${mb(s.gz)} | ${s.shared}${s.shared ? `: ${s.sharedExamples}` : ""} |`,

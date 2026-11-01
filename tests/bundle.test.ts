@@ -72,7 +72,7 @@ describe("trip bundles", () => {
     expect(coords.get("Barcelona-Sants")).toEqual([41.38, 2.14]);
   });
 
-  it("lists names that stand for stations in different towns", async () => {
+  it("tells apart stations of one name in different towns", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gtfs-"));
     const files: Record<string, string> = {
       agency: "agency_id,agency_name\nA,Rail",
@@ -96,8 +96,14 @@ describe("trip bundles", () => {
       ].join("\n"),
     };
     for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, `${name}.txt`), body);
-    const { sameName } = await readGtfsTimetable(dir, RENFE_ANY, "2026-10-05", 1, { v1: false });
+    const { trips, coords, sameName } = await readGtfsTimetable(dir, RENFE_ANY, "2026-10-05", 1, { v1: false });
     expect([...(sameName ?? new Map()).entries()]).toEqual([["Hauptbahnhof", [[52.52, 13.37], [50.11, 8.66]]]]);
+    // Halle's two platforms stay one station; the second Hauptbahnhof is its own.
+    expect(trips.map((t) => t.stops.map((x) => x.station))).toEqual([
+      ["Hauptbahnhof", "Halle"],
+      ["Halle", "Hauptbahnhof (2)"],
+    ]);
+    expect(coords.get("Hauptbahnhof (2)")).toEqual([50.11, 8.66]);
   });
 
   it("keeps every stop of a narrowed family, which v1 cuts", async () => {
