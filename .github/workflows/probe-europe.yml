@@ -1,0 +1,31 @@
+name: Europe probe
+
+# Measures every rail feed of the 33 Interrail countries (via Transitous's mirror):
+# trips, stations, bundle sizes, and the search engine's memory and speed over all of them.
+# The numbers size the search server. Results are in the run's summary.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/probe-europe.ts
+      - .github/workflows/probe-europe.yml
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Read every country's rail feeds and time the search
+        run: /usr/bin/time -f "%e s, %M KB peak memory" node --expose-gc --max-old-space-size=13312 --import tsx scripts/probe-europe.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: europe-probe
+          path: data/probe/summary.md
+          if-no-files-found: ignore

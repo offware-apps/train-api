@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildIndexV2, buildOperatorBundles, tripsFromTrains } from "../src/api";
 import { decodeBundle, encodeBundle, isBundle, type Bundle } from "../src/bundle";
@@ -9,6 +12,7 @@ import { RENFE } from "../src/operators/renfe";
 
 const DIR = fileURLToPath(new URL("./fixtures/gtfs-mini", import.meta.url));
 const GB = fileURLToPath(new URL("./fixtures/gb-schedule.json", import.meta.url));
+const RENFE_ANY = { ...RENFE, route: () => "RE" };
 const INTERRAIL = { interrail: { bookable: true, seat: "unknown" as const } };
 
 const trip = (over: Partial<Trip> = {}): Trip => ({
@@ -66,6 +70,40 @@ describe("trip bundles", () => {
     // A platform's station takes the station's own coordinates.
     expect(coords.get("Zaragoza-Delicias")).toEqual([41.65, -0.91]);
     expect(coords.get("Barcelona-Sants")).toEqual([41.38, 2.14]);
+  });
+
+  it("tells apart stations of one name in different towns", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gtfs-"));
+    const files: Record<string, string> = {
+      agency: "agency_id,agency_name\nA,Rail",
+      routes: "route_id,agency_id,route_short_name,route_type\nR,A,RE,2",
+      trips: "route_id,service_id,trip_id,trip_short_name\nR,S,T1,1\nR,S,T2,2",
+      calendar_dates: "service_id,date,exception_type\nS,20261005,1",
+      // Two "Hauptbahnhof" 300 km apart, and one station's two platforms 200 m apart.
+      stops: [
+        "stop_id,stop_name,stop_lat,stop_lon,parent_station",
+        "H1,Hauptbahnhof,52.52,13.37,",
+        "H2,Hauptbahnhof,50.11,8.66,",
+        "P1,Halle,51.48,11.98,",
+        "P2,Halle,51.4818,11.98,",
+      ].join("\n"),
+      stop_times: [
+        "trip_id,arrival_time,departure_time,stop_id,stop_sequence",
+        "T1,08:00:00,08:00:00,H1,1",
+        "T1,09:00:00,09:00:00,P1,2",
+        "T2,10:00:00,10:00:00,P2,1",
+        "T2,12:00:00,12:00:00,H2,2",
+      ].join("\n"),
+    };
+    for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, `${name}.txt`), body);
+    const { trips, coords, sameName } = await readGtfsTimetable(dir, RENFE_ANY, "2026-10-05", 1, { v1: false });
+    expect([...(sameName ?? new Map()).entries()]).toEqual([["Hauptbahnhof", [[52.52, 13.37], [50.11, 8.66]]]]);
+    // Halle's two platforms stay one station; the second Hauptbahnhof is its own.
+    expect(trips.map((t) => t.stops.map((x) => x.station))).toEqual([
+      ["Hauptbahnhof", "Halle"],
+      ["Halle", "Hauptbahnhof (2)"],
+    ]);
+    expect(coords.get("Hauptbahnhof (2)")).toEqual([50.11, 8.66]);
   });
 
   it("keeps every stop of a narrowed family, which v1 cuts", async () => {

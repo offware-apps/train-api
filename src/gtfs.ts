@@ -100,6 +100,17 @@ export interface GtfsOperator {
   passes(family: string): Partial<Record<PassId, PassAvailability>>;
 }
 
+/** Stations of one name further apart than this are different places sharing the name. */
+export const SAME_NAME_APART_KM = 3;
+
+/** Kilometres between two [lat, lon], close enough at station scale. */
+export function km(a: [number, number], b: [number, number]): number {
+  const rad = Math.PI / 180;
+  const x = (b[1] - a[1]) * rad * Math.cos(((a[0] + b[0]) / 2) * rad);
+  const y = (b[0] - a[0]) * rad;
+  return 6371 * Math.hypot(x, y);
+}
+
 /** "YYYYMMDD" → "YYYY-MM-DD". */
 function isoDate(d: string): string {
   return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
@@ -239,8 +250,15 @@ export async function readGtfs(dir: string, op: GtfsOperator, from: string, days
  * or the route's when the feed gives none (some feeds only name the line, others put the
  * train number there). v1 cuts the `narrow` families to the long-distance stations to
  * keep its stop pairs few; v2 keeps every stop, since a trip costs one entry per stop.
+ * `opts.v1: false` skips the rows.
  */
-export async function readGtfsTimetable(dir: string, op: GtfsOperator, from: string, days = 31): Promise<Timetable> {
+export async function readGtfsTimetable(
+  dir: string,
+  op: GtfsOperator,
+  from: string,
+  days = 31,
+  opts: { v1?: boolean } = {},
+): Promise<Timetable> {
   const agencies = new Map<string, string>();
   await readTable(dir, "agency", (r) => agencies.set(r.agency_id ?? "", r.agency_name ?? ""));
   const onlyAgency = agencies.size === 1 ? [...agencies.values()][0] ?? "" : "";
@@ -274,10 +292,12 @@ export async function readGtfsTimetable(dir: string, op: GtfsOperator, from: str
     const lon = Number(r.stop_lon);
     if (r.stop_lat && r.stop_lon && Number.isFinite(lat) && Number.isFinite(lon) && (lat || lon)) at.set(id, [lat, lon]);
   });
-  const stationOf = (stop: string): string => names.get(parents.get(stop) ?? stop) ?? names.get(stop) ?? "";
   const coords = new Map<string, [number, number]>();
 
+  // Calls hold the station's id first; it becomes the station's name below.
   const calls = new Map<string, Call[]>();
+  // Each station used, with where it is: its own position, else its first platform's.
+  const used = new Map<string, [number, number] | undefined>();
   await readTable(
     dir,
     "stop_times",
@@ -287,18 +307,42 @@ export async function readGtfsTimetable(dir: string, op: GtfsOperator, from: str
       const dep = gtfsMinutes(r.departure_time || r.arrival_time || "");
       if (Number.isNaN(arr) || Number.isNaN(dep)) return;
       const stop = r.stop_id ?? "";
-      const station = stationOf(stop);
-      // A station's place is its own, else its first platform's.
-      if (station && !coords.has(station)) {
-        const p = at.get(parents.get(stop) ?? stop) ?? at.get(stop);
-        if (p) coords.set(station, p);
-      }
+      const id = parents.get(stop) ?? stop;
+      if (!used.get(id)) used.set(id, at.get(id) ?? at.get(stop));
       const list = calls.get(trip) ?? [];
-      list.push({ seq: Number(r.stop_sequence), station, arr, dep });
+      list.push({ seq: Number(r.stop_sequence), station: id, arr, dep });
       calls.set(trip, list);
     },
     { column: "trip_id", keep: (id) => trips.has(id) },
   );
+
+  // One name can stand for stations in different towns ("Gare SNCF"): each place after
+  // the first takes a number, "Gare SNCF (2)", so trips don't jump between towns.
+  const byName = new Map<string, { at: [number, number]; label: string }[]>();
+  const label = new Map<string, string>();
+  for (const [id, p] of used) {
+    const name = names.get(id) ?? "";
+    if (!name) {
+      label.set(id, "");
+      continue;
+    }
+    const places = byName.get(name) ?? [];
+    byName.set(name, places);
+    const near = p ? places.find((q) => km(p, q.at) <= SAME_NAME_APART_KM) : places[0];
+    if (near) {
+      label.set(id, near.label);
+      continue;
+    }
+    const own = places.length === 0 ? name : `${name} (${places.length + 1})`;
+    label.set(id, own);
+    if (p) {
+      places.push({ at: p, label: own });
+      coords.set(own, p);
+    }
+  }
+  for (const list of calls.values()) for (const c of list) c.station = label.get(c.station) ?? "";
+  const sameName = new Map<string, [number, number][]>();
+  for (const [name, places] of byName) if (places.length > 1) sameName.set(name, places.map((q) => q.at));
 
   const wide = new Set<string>();
   if (op.narrow) {
@@ -317,8 +361,10 @@ export async function readGtfsTimetable(dir: string, op: GtfsOperator, from: str
     const passes = op.passes(trip.family);
     const all = list.filter((c, i) => c.station && c.station !== list[i - 1]?.station);
     if (all.length >= 2) whole.push(tripOf(op.id, all, trip.runs, str(trip.trainNo), str(trip.family), passes));
+    // v1 costs a row per pair of stops: a feed of every regional train reads trips only.
+    if (opts.v1 === false) continue;
     const keep = op.narrow?.(trip.family) ? all.filter((c) => wide.has(c.station)) : all;
     pushStopPairs(out, str, op.id, keep, trip.runs, trip.trainNo, trip.family, passes);
   }
-  return { trains: out, trips: whole, coords };
+  return { trains: out, trips: whole, coords, sameName };
 }

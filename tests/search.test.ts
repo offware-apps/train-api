@@ -87,6 +87,33 @@ describe("station matching", () => {
     expect(atocha).toMatchObject({ name: "Madrid-Puerta de Atocha", lat: 40.4066, calls: 3 });
   });
 
+  it("prefers a name its stations share over a busier one without the town", () => {
+    const tram = bundle(
+      "de",
+      [1, 2, 3, 4].map((i) => run(`T${i}`, [["Hauptbahnhof (U, Tram)", "07:00"], ["Pasing", "07:10"]])).concat([
+        run("RB1", [["München Hbf", "08:00"], ["Garmisch-Partenkirchen", "09:22"]]),
+      ]),
+      { "Hauptbahnhof (U, Tram)": [48.1402, 11.5601], "München Hbf": [48.1403, 11.5600], Pasing: [48.15, 11.46], "Garmisch-Partenkirchen": [47.49, 11.1] },
+    );
+    const obb = bundle("at", [run("RJ1", [["München Hauptbahnhof", "10:00"], ["Salzburg Hbf", "11:30"]])], {
+      "München Hauptbahnhof": [48.1401, 11.5602],
+      "Salzburg Hbf": [47.81, 13.05],
+    });
+    const net = new Network([tram, obb]);
+    expect(net.places.find((p) => p.stations.length === 3)?.name).toBe("München Hbf");
+  });
+
+  it("keeps the name most of a place's stations use", () => {
+    const at = (op: string, name: string, n: number): SearchBundle =>
+      bundle(op, Array.from({ length: n }, (_, i) => run(`${op}${i}`, [[name, "07:00"], ["Elsewhere " + op, "08:00"]])), {
+        [name]: [47.3779, 8.5403],
+        ["Elsewhere " + op]: [46 + n / 10, 7],
+      });
+    // The quay's stop is busiest, but three operators call the place "Zürich HB".
+    const net = new Network([at("ch", "Zürich HB", 2), at("de", "Zürich HB", 1), at("at", "Zürich HB", 1), at("x", "Zürich, Bahnhofquai", 9)]);
+    expect(net.places.find((p) => p.stations.length === 4)?.name).toBe("Zürich HB");
+  });
+
   it("groups a town's stations, placed or not, and finds the town first", () => {
     const paris = net.resolve("paris");
     expect(paris?.kind).toBe("city");

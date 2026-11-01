@@ -334,6 +334,47 @@ export class Network {
       }
       rawPlace[i] = p;
     });
+    // A name the place's other stations agree on beats a busier one: first the name most
+    // of them normalize to ("Zürich HB" over the quay's "Zürich, Bahnhofquai"), then one
+    // sharing a word with most (Munich is "München Hbf", not the tram stop "Hauptbahnhof
+    // (U, Tram)" that merged into it), then the busiest.
+    const byPlace: number[][] = this.places.map(() => []);
+    raw.forEach((_, i) => byPlace[rawPlace[i] as number]?.push(i));
+    const words = raw.map((s) => new Set(s.norm.split(" ").filter((w) => w.length >= 3)));
+    byPlace.forEach((list, p) => {
+      if (list.length < 3) return;
+      const located = (i: number): boolean => raw[i]?.lat !== null && raw[i]?.lon !== null;
+      const score = (i: number): [number, number, number] => {
+        let same = 0;
+        let shared = 0;
+        for (const j of list) {
+          if (j === i) continue;
+          if (raw[j]?.norm === raw[i]?.norm) same++;
+          if ([...(words[i] as Set<string>)].some((w) => words[j]?.has(w))) shared++;
+        }
+        return [same, shared, calls[i] as number];
+      };
+      const better = (a: [number, number, number], b: [number, number, number]): boolean =>
+        a[0] !== b[0] ? a[0] > b[0] : a[1] !== b[1] ? a[1] > b[1] : a[2] > b[2];
+      const cur = namedBy[p] as number;
+      let best = cur;
+      let bestScore = score(cur);
+      for (const i of list) {
+        if (located(i) !== located(cur)) continue;
+        const sc = score(i);
+        if (better(sc, bestScore)) {
+          best = i;
+          bestScore = sc;
+        }
+      }
+      if (best === cur) return;
+      const s = raw[best] as RawStation;
+      const place = this.places[p] as Place;
+      namedBy[p] = best;
+      place.name = s.name;
+      place.lat = s.lat;
+      place.lon = s.lon;
+    });
     this.placeOf = stationRaw.map((ids) => Int32Array.from(ids, (i) => rawPlace[i] as number));
     const n = this.places.length;
     const change = opts.change ?? 10;
