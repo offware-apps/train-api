@@ -41,6 +41,12 @@ jobs:
         run: /usr/bin/time -f "%e s, %M KB peak memory" npm run build:api
         env:
           NODE_OPTIONS: --max-old-space-size=12288
+      - name: Search the real bundles
+        run: |
+          day=$(date -u -d tomorrow +%F)
+          TRAIN_API=public/v2 npm run --silent search -- paris madrid "$day" 07:00
+          TRAIN_API=public/v2 npm run --silent search -- madrid amsterdam "$day" 06:00
+          TRAIN_API=public/v2 OPERATORS=sncf,renfe npm run --silent search -- paris barcelona "$day"
       - name: Sizes
         run: |
           du -sh public/v1/* public/v2/*

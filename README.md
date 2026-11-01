@@ -36,6 +36,13 @@ Free, no key, CORS open, refreshed daily: start with the [developer guide](docs/
 (endpoints, JS and Python examples, licences and credits, stability promise) and the
 [OpenAPI spec](docs/openapi.yaml).
 
+## Search journeys
+
+`src/search.ts` finds journeys with changes across every operator, on the trip bundles. It
+runs in the browser on downloaded bundles (free, offline once downloaded), from the command
+line (`npm run search -- paris madrid 2026-10-12`), or as an HTTP API you host with the
+`Dockerfile` (`/v2/places`, `/v2/journeys`). See the [developer guide](docs/developers.md#journey-search).
+
 ## How it works
 
 1. `npm run fetch` downloads every source to `data/raw/`: the SNCF `tgvmax` feed (every

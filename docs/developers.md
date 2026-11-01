@@ -227,6 +227,42 @@ npm ci && npm run fetch && npm run build:api   # writes public/v1/ and public/v2
 The national feeds need about 12 GB of memory (`NODE_OPTIONS=--max-old-space-size=12288`).
 Serve `public/` from any static host.
 
+## Journey search
+
+The trip bundles come with a journey search, `src/search.ts`: from a town or station to
+another on a date, with changes across operators. Stations are matched across operators by
+their coordinates (and by name where a source has none), and the stations of one town are
+grouped, so a change can cross town. The same file runs in three places:
+
+- **In the browser, free.** Copy `src/search.ts` (it has no imports), download the bundles
+  of the countries a trip needs from GitHub Pages, and search on the device. Paris to Madrid
+  needs `sncf` and `renfe`. Once downloaded, searches work offline.
+
+  ```js
+  import { Network } from "./search.js";
+  const base = "https://offware-apps.github.io/train-api/v2/";
+  const bundles = await Promise.all(["sncf", "renfe"].map((op) => fetch(`${base}${op}/interrail.json`).then((r) => r.json())));
+  const net = new Network(bundles);
+  const journeys = net.journeys(net.resolve("paris"), net.resolve("madrid"), "2026-10-12", { time: "07:00" });
+  ```
+
+- **On the command line:** `npm run search -- paris madrid 2026-10-12 07:00`. Set
+  `TRAIN_API` to a folder (such as `public/v2` after a build, or a downloaded copy) to search
+  offline, and `OPERATORS=sncf,renfe` to load only some operators.
+
+- **As an HTTP API you host:** `docker build -t train-api . && docker run -p 8080:8080 train-api`
+  (or `npm start`). No key, CORS open.
+
+  | Path | Content |
+  |------|---------|
+  | `/v2/places?q=madr` | towns and stations matching a name: `id`, `name`, `kind` (`city` or `station`), and each operator's name for them |
+  | `/v2/journeys?from=madrid&to=amsterdam&date=2026-10-12` | journeys leaving that day, earliest first; optional `time=08:00`, `results` (1 to 10, default 5), `maxTrains` (1 to 6, default 4). Each has `departure`, `arrival` (local times), `duration` in minutes, `changes` and its `legs`, plus the `sources` to credit |
+  | `/health` | whether the timetables are loaded, and how fresh |
+
+  `from` and `to` take an id from `/v2/places` or a name. Configuration: `PORT` (8080),
+  `TRAIN_API` (the bundles' base URL or folder; the public API by default), `OPERATORS`,
+  `PASS` (`interrail`), `RELOAD_HOURS` (6). All of Europe fits in a few hundred MB of memory.
+
 ## Help and requests
 
 Open an issue on [offware-apps/train-api](https://github.com/offware-apps/train-api/issues)
