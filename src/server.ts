@@ -3,6 +3,7 @@
  *
  *   GET /v2/places?q=madr                                   towns and stations matching a name
  *   GET /v2/journeys?from=madrid&to=amsterdam&date=2026-10-12[&time=08:00][&results=5][&maxTrains=4]
+ *   GET /v2/reachable?from=madrid&date=2026-10-12[&time=06:00]   every place reachable that day, fastest journey each
  *   GET /health
  *
  * No key, CORS open. It loads the trip bundles from TRAIN_API (the public API by default,
@@ -40,7 +41,11 @@ export function handle(req: IncomingMessage, res: ServerResponse, state: State |
   if (path === "/") {
     return send(res, 200, {
       name: "train-api journey search",
-      endpoints: ["/v2/places?q=madr", "/v2/journeys?from=madrid&to=amsterdam&date=YYYY-MM-DD&time=08:00"],
+      endpoints: [
+        "/v2/places?q=madr",
+        "/v2/journeys?from=madrid&to=amsterdam&date=YYYY-MM-DD&time=08:00",
+        "/v2/reachable?from=madrid&date=YYYY-MM-DD",
+      ],
       source: "https://github.com/offware-apps/train-api",
     });
   }
@@ -56,6 +61,32 @@ export function handle(req: IncomingMessage, res: ServerResponse, state: State |
       stations: m.places.flatMap((i) => network.places[i]?.stations ?? []),
     }));
     return send(res, 200, { places });
+  }
+  if (path === "/v2/reachable") {
+    const fromQ = url.searchParams.get("from") ?? "";
+    const date = url.searchParams.get("date") ?? "";
+    const time = url.searchParams.get("time") ?? undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || (time && !/^\d{2}:\d{2}$/.test(time))) {
+      return send(res, 400, { error: "date must be YYYY-MM-DD and time HH:MM" });
+    }
+    const from = network.resolve(fromQ);
+    if (!from) return send(res, 404, { error: `unknown place: ${fromQ}` });
+    const maxTrains = Math.min(4, Math.max(1, Number(url.searchParams.get("maxTrains") ?? 3) || 3));
+    const reach = network.reachable(from, date, { time, maxTrains });
+    const places = [...reach]
+      .map(([i, journey]) => {
+        const p = network.places[i];
+        return { place: { id: p?.id, name: p?.name, lat: p?.lat, lon: p?.lon }, journey };
+      })
+      .sort((a, b) => a.journey.duration - b.journey.duration);
+    const used = new Set(places.flatMap((r) => r.journey.legs.map((l) => l.operator)));
+    return send(res, 200, {
+      from: { id: from.id, name: from.name, kind: from.kind },
+      date,
+      places,
+      sources: [...used].map((op) => loaded.sources.get(op) ?? op),
+      timetables: loaded.index.updatedAt,
+    });
   }
   if (path === "/v2/journeys") {
     const fromQ = url.searchParams.get("from") ?? "";

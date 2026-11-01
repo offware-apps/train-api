@@ -102,6 +102,17 @@ describe("search API", () => {
     expect(journeys[0]).toMatchObject({ changes: 1, departure: "2026-10-12T07:45", arrival: "2026-10-12T17:20" });
   });
 
+  it("lists the places reachable from one, fastest first", async () => {
+    const { status, body } = await get("/v2/reachable?from=madrid&date=2026-10-12");
+    expect(status).toBe(200);
+    const places = body.places as { place: { name: string }; journey: { changes: number } }[];
+    expect(places.map((r) => [r.place.name, r.journey.changes])).toEqual([
+      ["Barcelona-Sants", 0],
+      ["PARIS (intramuros)", 1],
+    ]);
+    expect(body.sources).toEqual(["Renfe (CC BY 4.0)", "SNCF (Licence Ouverte)"]);
+  });
+
   it("says what is wrong with a request", async () => {
     expect((await get("/v2/journeys?from=madrid&to=paris&date=12/10/2026")).status).toBe(400);
     expect((await get("/v2/journeys?from=madrid&to=atlantis&date=2026-10-12")).status).toBe(404);

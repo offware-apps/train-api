@@ -257,6 +257,7 @@ grouped, so a change can cross town. The same file runs in three places:
   |------|---------|
   | `/v2/places?q=madr` | towns and stations matching a name: `id`, `name`, `kind` (`city` or `station`), and each operator's name for them |
   | `/v2/journeys?from=madrid&to=amsterdam&date=2026-10-12` | journeys leaving that day, earliest first; optional `time=08:00`, `results` (1 to 10, default 5), `maxTrains` (1 to 6, default 4). Each has `departure`, `arrival` (local times), `duration` in minutes, `changes` and its `legs`, plus the `sources` to credit |
+  | `/v2/reachable?from=madrid&date=2026-10-12` | every place reachable that day, each with its fastest journey, fastest first; optional `time` and `maxTrains` (1 to 4, default 3) |
   | `/health` | whether the timetables are loaded, and how fresh |
 
   `from` and `to` take an id from `/v2/places` or a name. Configuration: `PORT` (8080),

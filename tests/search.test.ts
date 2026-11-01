@@ -72,6 +72,21 @@ describe("station matching", () => {
     expect(sants[0]).toMatchObject({ name: "Barcelona-Sants", lat: 41.3792 });
   });
 
+  it("names a place after its busiest station", () => {
+    const b = bundle(
+      "renfe",
+      [
+        run("C1", [["Madrid-Atocha Cercanías", "07:00"], ["Getafe", "07:20"]]),
+        run("AVE1", [["Madrid-Puerta de Atocha", "08:00"], ["Sevilla", "10:30"]]),
+        run("AVE2", [["Madrid-Puerta de Atocha", "09:00"], ["Sevilla", "11:30"]]),
+      ],
+      // Two platforms' worth apart: one station.
+      { "Madrid-Atocha Cercanías": [40.4065, -3.6895], "Madrid-Puerta de Atocha": [40.4066, -3.6892], Getafe: [40.3, -3.7], Sevilla: [37.39, -5.97] },
+    );
+    const atocha = new Network([b]).places.find((p) => p.stations.length === 2);
+    expect(atocha).toMatchObject({ name: "Madrid-Puerta de Atocha", lat: 40.4066 });
+  });
+
   it("groups a town's stations, placed or not, and finds the town first", () => {
     const paris = net.resolve("paris");
     expect(paris?.kind).toBe("city");
@@ -135,5 +150,28 @@ describe("journey search", () => {
     });
     const j = new Network([fi]).journeys([0], [1], "2026-10-12", { time: "09:30" })[0];
     expect(j).toMatchObject({ departure: "2026-10-12T10:00", arrival: "2026-10-12T11:30", duration: 90 });
+  });
+
+  it("lists every place reachable from a town, each with its fastest journey", () => {
+    const madrid = net.resolve("madrid");
+    const reach = net.reachable(madrid as never, "2026-10-12");
+    const byName = new Map([...reach].map(([p, j]) => [net.places[p]?.name, j]));
+    expect([...byName.keys()].sort()).toEqual([
+      "Amsterdam Centraal",
+      "Barcelona-Sants",
+      "PARIS (intramuros)",
+      "Zaragoza-Delicias",
+    ]);
+    // Paris Nord is only walked to: no train arrives there.
+    // The night train takes 2h20, 03071 2h25, 03063 2h30.
+    expect(byName.get("Barcelona-Sants")?.legs.map((l) => l.trainNo)).toEqual(["00900"]);
+    expect(byName.get("Amsterdam Centraal")).toMatchObject({ changes: 2, arrival: "2026-10-12T22:50" });
+  });
+
+  it("finds a station's place by the operator's own name", () => {
+    const p = net.placeIndex("sncf", "BARCELONA SANTS");
+    expect(net.places[p]?.name).toBe("Barcelona-Sants");
+    expect(net.placeIndex("renfe", "Barcelona-Sants")).toBe(p);
+    expect(net.placeIndex("sncf", "Nowhere")).toBe(-1);
   });
 });

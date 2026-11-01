@@ -216,6 +216,19 @@ function runsOn(mask: string, i: number): boolean {
   return (n & (1 << (i & 3))) !== 0;
 }
 
+/** One scan's labels, per number of trains k (index k*n + place). */
+interface Labels {
+  n: number;
+  K: number;
+  arrival: Int32Array;
+  legBoard: Int32Array;
+  legAlight: Int32Array;
+  readyFrom: Int32Array;
+  readyLevel: Int8Array;
+  atTarget: Int32Array;
+  targetPlace: Int32Array;
+}
+
 interface Found {
   dep: number;
   arr: number;
@@ -286,23 +299,35 @@ export class Network {
       const target = roots.size === 1 ? [...roots][0] as number : unlocated[0] as number;
       for (const i of unlocated) same.union(i, target);
     }
+    // How many trips call at each station: a place is named after its busiest one.
+    const calls = new Int32Array(raw.length);
+    bundles.forEach((b, bi) => {
+      const ids = stationRaw[bi] as Int32Array;
+      for (const t of b.trips) for (const si of t[3]) calls[ids[si] as number] = (calls[ids[si] as number] as number) + 1;
+    });
     const rawPlace = new Int32Array(raw.length);
     const rootPlace = new Map<number, number>();
+    const namedBy: number[] = [];
     raw.forEach((s, i) => {
       const root = same.find(i);
       let p = rootPlace.get(root);
       if (p === undefined) {
         p = this.places.length;
         rootPlace.set(root, p);
-        this.places.push({ id: "", name: s.name, lat: null, lon: null, city: "", stations: [] });
+        this.places.push({ id: "", name: s.name, lat: s.lat, lon: s.lon, city: "", stations: [] });
+        namedBy.push(i);
       }
       const place = this.places[p] as Place;
       place.stations.push({ operator: s.operator, name: s.name });
-      // Named and placed after its first station with a position (GTFS names read best).
-      if (place.lat === null && s.lat !== null && s.lon !== null) {
+      // Named and placed after its busiest station with a position (GTFS names read best).
+      const cur = raw[namedBy[p] as number] as RawStation;
+      const located = s.lat !== null && s.lon !== null;
+      const curLocated = cur.lat !== null && cur.lon !== null;
+      if ((located && !curLocated) || (located === curLocated && (calls[i] as number) > (calls[namedBy[p] as number] as number))) {
+        namedBy[p] = i;
+        place.name = s.name;
         place.lat = s.lat;
         place.lon = s.lon;
-        place.name = s.name;
       }
       rawPlace[i] = p;
     });
@@ -376,6 +401,14 @@ export class Network {
       p.id = id;
       if (!p.city) p.city = id;
     });
+  }
+
+  /** The place of one operator's station, or -1. */
+  placeIndex(operator: string, name: string): number {
+    const bi = this.bundles.findIndex((b) => b.operator === operator);
+    if (bi < 0) return -1;
+    const si = (this.bundles[bi] as SearchBundle).stations.findIndex((s) => s[0] === name);
+    return si < 0 ? -1 : ((this.placeOf[bi] as Int32Array)[si] ?? -1);
   }
 
   /** Every service date some bundle covers, sorted. */
@@ -528,21 +561,18 @@ export class Network {
   }
 
   /**
-   * One connection scan from `start`: for each number of trains k, the earliest arrival at
-   * any target. Labels are "with at most k trains", so a journey is returned only where
-   * one more train arrives earlier.
+   * One connection scan from `start`, with one label per number of trains. With targets,
+   * it stops once nothing leaving later can reach one sooner; without, it labels every
+   * place reached before `until`.
    */
-  private scan(h: Hops, origins: number[], targets: number[], start: number, maxTrains: number, date: string): Found[] {
+  private labels(h: Hops, origins: number[], isTarget: Uint8Array | null, start: number, K: number, until = INF): Labels {
     const n = this.places.length;
-    const K = maxTrains;
-    const isTarget = new Uint8Array(n);
-    for (const t of targets) isTarget[t] = 1;
     // ready[k*n + p]: earliest time to board a train at p having used at most k trains.
     const ready = new Int32Array((K + 1) * n).fill(INF);
     // How it was reached: -1 the origin, -2 by arriving there, else the place walked from.
     const readyFrom = new Int32Array((K + 1) * n).fill(-1);
     const readyLevel = new Int8Array((K + 1) * n);
-    // arrival[k*n + p], and the leg that got there: trip instance, boarding hop, alighting hop.
+    // arrival[k*n + p], and the leg that got there: boarding hop and alighting hop.
     const arrival = new Int32Array((K + 1) * n).fill(INF);
     const legBoard = new Int32Array((K + 1) * n);
     const legAlight = new Int32Array((K + 1) * n);
@@ -551,7 +581,7 @@ export class Network {
     for (const o of origins) {
       for (let k = 0; k <= K; k++) ready[k * n + o] = start;
       for (const w of this.walks[o] ?? []) {
-        if (isTarget[w.to] || origins.includes(w.to)) continue;
+        if (isTarget?.[w.to] || origins.includes(w.to)) continue;
         for (let k = 0; k <= K; k++) ready[k * n + w.to] = Math.min(ready[k * n + w.to] as number, start + w.minutes);
       }
     }
@@ -566,7 +596,7 @@ export class Network {
       if ((h.dep[mid] as number) < start) lo = mid + 1;
       else hi = mid;
     }
-    let best = INF;
+    let best = until;
     for (let c = lo; c < h.dep.length; c++) {
       const dep = h.dep[c] as number;
       if (dep >= best) break;
@@ -589,7 +619,7 @@ export class Network {
       arrival[at] = arr;
       legBoard[at] = boardHop[inst] as number;
       legAlight[at] = c;
-      if (isTarget[to]) {
+      if (isTarget?.[to]) {
         for (let kk = k; kk <= K; kk++) {
           if (arr < (atTarget[kk] as number)) {
             atTarget[kk] = arr;
@@ -616,35 +646,86 @@ export class Network {
         }
       }
     }
+    return { n, K, arrival, legBoard, legAlight, readyFrom, readyLevel, atTarget, targetPlace };
+  }
 
+  /** For each number of trains, the earliest arrival at a target, where one more train arrives sooner. */
+  private scan(h: Hops, origins: number[], targets: number[], start: number, maxTrains: number, date: string): Found[] {
+    const isTarget = new Uint8Array(this.places.length);
+    for (const t of targets) isTarget[t] = 1;
+    const l = this.labels(h, origins, isTarget, start, maxTrains);
     const out: Found[] = [];
     let previous = INF;
-    for (let k = 1; k <= K; k++) {
-      const a = atTarget[k] as number;
+    for (let k = 1; k <= maxTrains; k++) {
+      const a = l.atTarget[k] as number;
       if (a >= previous) continue;
       previous = a;
-      const journey = this.rebuild(h, k, targetPlace[k] as number, n, arrival, legBoard, legAlight, readyFrom, readyLevel, date);
+      const hops = this.trace(h, l, k, l.targetPlace[k] as number);
+      const journey = hops && this.journeyOf(h, hops, date);
       if (journey) out.push(journey);
     }
     return out;
   }
 
-  private rebuild(
-    h: Hops,
-    level: number,
-    place: number,
-    n: number,
-    arrival: Int32Array,
-    legBoard: Int32Array,
-    legAlight: Int32Array,
-    readyFrom: Int32Array,
-    readyLevel: Int8Array,
+  /**
+   * Every place reachable from `from` on `date`, each with its fastest journey (the
+   * shortest door to door, then the earliest). Departures are tried every `step` minutes
+   * from `opts.time`, and journeys may take up to `maxMinutes`.
+   */
+  reachable(
+    from: Match | number[],
     date: string,
-  ): Found | null {
+    opts: Omit<SearchOptions, "results"> & { step?: number; maxMinutes?: number } = {},
+  ): Map<number, Journey> {
+    const origins = Array.isArray(from) ? from : from.places;
+    const out = new Map<number, Journey>();
+    if (origins.length === 0) return out;
+    const K = Math.min(8, Math.max(1, opts.maxTrains ?? 4));
+    const step = Math.max(15, opts.step ?? 60);
+    const maxMinutes = opts.maxMinutes ?? 24 * 60;
+    const h = this.hops(date);
+    const originOffset = this.offsetAt(origins[0] as number);
+    const first = (opts.time ? Number(opts.time.slice(0, 2)) * 60 + Number(opts.time.slice(3, 5)) : 0) - originOffset;
+    const dayEnd = 1440 - originOffset;
+    const skip = new Set(origins);
+    for (const o of origins) for (const w of this.walks[o] ?? []) skip.add(w.to);
+    const best = new Map<number, { dep: number; arr: number; hops: [number, number][] }>();
+    for (let start = first; start < dayEnd; start += step) {
+      const l = this.labels(h, origins, null, start, K, start + maxMinutes);
+      for (let p = 0; p < l.n; p++) {
+        if (skip.has(p)) continue;
+        let k = 0;
+        let a = INF;
+        for (let kk = 1; kk <= K; kk++) {
+          const v = l.arrival[kk * l.n + p] as number;
+          if (v < a) {
+            a = v;
+            k = kk;
+          }
+        }
+        if (k === 0) continue;
+        const hops = this.trace(h, l, k, p);
+        if (!hops?.length) continue;
+        const dep = h.dep[(hops[0] as [number, number])[0]] as number;
+        if (dep >= dayEnd) continue;
+        const prev = best.get(p);
+        if (!prev || a - dep < prev.arr - prev.dep || (a - dep === prev.arr - prev.dep && a < prev.arr)) best.set(p, { dep, arr: a, hops });
+      }
+    }
+    for (const [p, b] of best) {
+      const j = this.journeyOf(h, b.hops, date);
+      if (j) out.set(p, j.journey);
+    }
+    return out;
+  }
+
+  /** The hops (boarding, alighting) of the journey labelled at `place` with `level` trains. */
+  private trace(h: Hops, l: Labels, level: number, place: number): [number, number][] | null {
+    const { n, arrival, legBoard, legAlight, readyFrom, readyLevel } = l;
     const hops: [number, number][] = [];
     let p = place;
     let k = level;
-    // Find the level the arrival at the target was recorded at: the fewest trains that got there.
+    // The label at the fewest trains that got there.
     while (k > 1 && (arrival[(k - 1) * n + p] as number) <= (arrival[k * n + p] as number)) k--;
     for (let guard = 0; guard < 16; guard++) {
       const at = k * n + p;
@@ -652,10 +733,10 @@ export class Network {
       const board = legBoard[at] as number;
       hops.unshift([board, legAlight[at] as number]);
       const boardPlace = h.from[board] as number;
-      if (k === 1) return this.journeyOf(h, hops, date);
+      if (k === 1) return hops;
       const r = (k - 1) * n + boardPlace;
       const how = readyFrom[r] as number;
-      if (how === -1) return this.journeyOf(h, hops, date);
+      if (how === -1) return hops;
       p = how === -2 ? boardPlace : how;
       k = readyLevel[r] as number;
     }
