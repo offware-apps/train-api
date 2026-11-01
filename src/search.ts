@@ -32,6 +32,8 @@ export interface Place {
   /** The town's id: every place of one town shares it. */
   city: string;
   stations: { operator: string; name: string }[];
+  /** How many trips call here: how busy the place is, to rank places. */
+  calls: number;
 }
 
 /** What a name or an id resolves to: one station, or every station of a town. */
@@ -314,11 +316,12 @@ export class Network {
       if (p === undefined) {
         p = this.places.length;
         rootPlace.set(root, p);
-        this.places.push({ id: "", name: s.name, lat: s.lat, lon: s.lon, city: "", stations: [] });
+        this.places.push({ id: "", name: s.name, lat: s.lat, lon: s.lon, city: "", stations: [], calls: 0 });
         namedBy.push(i);
       }
       const place = this.places[p] as Place;
       place.stations.push({ operator: s.operator, name: s.name });
+      place.calls += calls[i] as number;
       // Named and placed after its busiest station with a position (GTFS names read best).
       const cur = raw[namedBy[p] as number] as RawStation;
       const located = s.lat !== null && s.lon !== null;

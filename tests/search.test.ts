@@ -72,7 +72,7 @@ describe("station matching", () => {
     expect(sants[0]).toMatchObject({ name: "Barcelona-Sants", lat: 41.3792 });
   });
 
-  it("names a place after its busiest station", () => {
+  it("names a place after its busiest station, and counts the trips calling there", () => {
     const b = bundle(
       "renfe",
       [
@@ -84,7 +84,7 @@ describe("station matching", () => {
       { "Madrid-Atocha Cercanías": [40.4065, -3.6895], "Madrid-Puerta de Atocha": [40.4066, -3.6892], Getafe: [40.3, -3.7], Sevilla: [37.39, -5.97] },
     );
     const atocha = new Network([b]).places.find((p) => p.stations.length === 2);
-    expect(atocha).toMatchObject({ name: "Madrid-Puerta de Atocha", lat: 40.4066 });
+    expect(atocha).toMatchObject({ name: "Madrid-Puerta de Atocha", lat: 40.4066, calls: 3 });
   });
 
   it("groups a town's stations, placed or not, and finds the town first", () => {
