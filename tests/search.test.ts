@@ -103,6 +103,17 @@ describe("station matching", () => {
     expect(net.places.find((p) => p.stations.length === 3)?.name).toBe("München Hbf");
   });
 
+  it("keeps the name most of a place's stations use", () => {
+    const at = (op: string, name: string, n: number): SearchBundle =>
+      bundle(op, Array.from({ length: n }, (_, i) => run(`${op}${i}`, [[name, "07:00"], ["Elsewhere " + op, "08:00"]])), {
+        [name]: [47.3779, 8.5403],
+        ["Elsewhere " + op]: [46 + n / 10, 7],
+      });
+    // The quay's stop is busiest, but three operators call the place "Zürich HB".
+    const net = new Network([at("ch", "Zürich HB", 2), at("de", "Zürich HB", 1), at("at", "Zürich HB", 1), at("x", "Zürich, Bahnhofquai", 9)]);
+    expect(net.places.find((p) => p.stations.length === 4)?.name).toBe("Zürich HB");
+  });
+
   it("groups a town's stations, placed or not, and finds the town first", () => {
     const paris = net.resolve("paris");
     expect(paris?.kind).toBe("city");
