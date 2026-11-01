@@ -2,7 +2,7 @@
   "name": "train-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Open train data for rail passes (Interrail first), built on SNCF open data and served as static JSON.",
+  "description": "Open train data for rail passes (Interrail first), served as static JSON, with a journey search that runs in the browser or as a self-hosted API.",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
@@ -10,6 +10,8 @@
     "test": "vitest run",
     "fetch": "tsx scripts/fetch.ts",
     "build:api": "tsx scripts/build-api.ts",
+    "search": "tsx scripts/search.ts",
+    "start": "tsx src/server.ts",
     "check": "npm run typecheck && npm test"
   },
   "devDependencies": {
