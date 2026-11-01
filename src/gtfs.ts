@@ -100,6 +100,16 @@ export interface GtfsOperator {
   passes(family: string): Partial<Record<PassId, PassAvailability>>;
 }
 
+/** Stations of one name further apart than this are different places sharing the name. */
+const SAME_NAME_APART_KM = 3;
+
+function km(a: [number, number], b: [number, number]): number {
+  const rad = Math.PI / 180;
+  const x = (b[1] - a[1]) * rad * Math.cos(((a[0] + b[0]) / 2) * rad);
+  const y = (b[0] - a[0]) * rad;
+  return 6371 * Math.hypot(x, y);
+}
+
 /** "YYYYMMDD" → "YYYY-MM-DD". */
 function isoDate(d: string): string {
   return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
@@ -285,6 +295,8 @@ export async function readGtfsTimetable(
   const coords = new Map<string, [number, number]>();
 
   const calls = new Map<string, Call[]>();
+  // Each name's stations and where they are: one name can stand for stations in different towns.
+  const positions = new Map<string, Map<string, [number, number]>>();
   await readTable(
     dir,
     "stop_times",
@@ -299,6 +311,13 @@ export async function readGtfsTimetable(
       if (station && !coords.has(station)) {
         const p = at.get(parents.get(stop) ?? stop) ?? at.get(stop);
         if (p) coords.set(station, p);
+      }
+      if (station) {
+        const id = parents.get(stop) ?? stop;
+        const p = at.get(id) ?? at.get(stop);
+        const seen = positions.get(station) ?? new Map<string, [number, number]>();
+        if (p && !seen.has(id)) seen.set(id, p);
+        positions.set(station, seen);
       }
       const list = calls.get(trip) ?? [];
       list.push({ seq: Number(r.stop_sequence), station, arr, dep });
@@ -329,5 +348,11 @@ export async function readGtfsTimetable(
     const keep = op.narrow?.(trip.family) ? all.filter((c) => wide.has(c.station)) : all;
     pushStopPairs(out, str, op.id, keep, trip.runs, trip.trainNo, trip.family, passes);
   }
-  return { trains: out, trips: whole, coords };
+  const sameName = new Map<string, [number, number][]>();
+  for (const [name, seen] of positions) {
+    const spots: [number, number][] = [];
+    for (const p of seen.values()) if (spots.every((q) => km(p, q) > SAME_NAME_APART_KM)) spots.push(p);
+    if (spots.length > 1) sameName.set(name, spots);
+  }
+  return { trains: out, trips: whole, coords, sameName };
 }

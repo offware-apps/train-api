@@ -93,4 +93,6 @@ export interface Timetable {
   trips: Trip[];
   /** Station name → [latitude, longitude], when the source publishes it. */
   coords: Map<string, [number, number]>;
+  /** Names whose stations lie in different places (a GTFS source): every position, for each. */
+  sameName?: Map<string, [number, number][]>;
 }

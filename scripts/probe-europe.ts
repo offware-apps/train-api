@@ -79,6 +79,11 @@ function countryOf(file: string): string | null {
   return c && c in COUNTRIES ? c : null;
 }
 
+function km(a: [number, number], b: [number, number]): number {
+  const rad = Math.PI / 180;
+  return 6371 * Math.hypot((b[1] - a[1]) * rad * Math.cos(((a[0] + b[0]) / 2) * rad), (b[0] - a[0]) * rad);
+}
+
 const mb = (n: number): string => (n / 1e6).toFixed(1);
 const secs = (ms: number): string => (ms / 1000).toFixed(1);
 
@@ -129,11 +134,18 @@ console.log(`[probe] ${sources.length} feeds listed, ${sources.length - skipped.
 if (skipped.length) console.log(`[probe] other regions: ${skipped.join(", ")}`);
 
 const feeds: FeedRow[] = [];
-const summary: { country: string; feeds: number; trips: number; variants: number; stations: number; located: number; bytes: number; gz: number }[] = [];
+const summary: { country: string; shared: number; sharedExamples: string; feeds: number; trips: number; variants: number; stations: number; located: number; bytes: number; gz: number }[] = [];
 const t0 = Date.now();
 for (const [country, list] of [...byCountry].sort()) {
   const trips: Trip[] = [];
   const coords = new Map<string, [number, number]>();
+  // Every position each station name stands for, across the country's feeds.
+  const spots = new Map<string, [number, number][]>();
+  const addSpot = (name: string, p: [number, number]): void => {
+    const list = spots.get(name) ?? [];
+    if (list.every((q) => km(p, q) > 3)) list.push(p);
+    spots.set(name, list);
+  };
   for (const src of list) {
     const file = src.split("/").pop() as string;
     const row: FeedRow = { file, country, zipBytes: 0, trips: 0, readMs: 0 };
@@ -156,6 +168,8 @@ for (const [country, list] of [...byCountry].sort()) {
       row.trips = tt.trips.length;
       for (const trip of tt.trips) trips.push(trip);
       for (const [name, at] of tt.coords) if (!coords.has(name)) coords.set(name, at);
+      for (const [name, at] of tt.coords) addSpot(name, at);
+      for (const [name, all] of tt.sameName ?? []) for (const p of all) addSpot(name, p);
     } catch (err) {
       row.error = String(err).slice(0, 200);
     } finally {
@@ -170,8 +184,11 @@ for (const [country, list] of [...byCountry].sort()) {
   const bundle = encodeBundle(country, "interrail", trips, coords);
   const json = JSON.stringify(bundle);
   writeFileSync(join(OUT, `${country}.json`), json);
+  const shared = [...spots].filter(([, l]) => l.length > 1).sort((a, b) => b[1].length - a[1].length);
   const row = {
     country,
+    shared: shared.length,
+    sharedExamples: shared.slice(0, 6).map(([n, l]) => `${n} (${l.length})`).join(", "),
     feeds: list.length,
     trips: trips.length,
     variants: bundle.trips.length,
@@ -256,10 +273,12 @@ const lines = [
   "",
   `${feeds.length} feeds read in ${secs(readAll)} s; ${feeds.filter((f) => f.error).length} failed.`,
   "",
-  "| Country | Feeds | Trips | Stations (located) | Bundle MB | Gzipped MB |",
-  "|---|---|---|---|---|---|",
-  ...summary.map((s) => `| ${COUNTRIES[s.country]} | ${s.feeds} | ${s.variants} | ${s.stations} (${s.located}) | ${mb(s.bytes)} | ${mb(s.gz)} |`),
-  `| **All** | ${feeds.length} | ${total.trips} | ${total.stations} | ${mb(total.bytes)} | ${mb(total.gz)} |`,
+  "| Country | Feeds | Trips | Stations (located) | Bundle MB | Gzipped MB | Names shared by distant stations |",
+  "|---|---|---|---|---|---|---|",
+  ...summary.map(
+    (s) => `| ${COUNTRIES[s.country]} | ${s.feeds} | ${s.variants} | ${s.stations} (${s.located}) | ${mb(s.bytes)} | ${mb(s.gz)} | ${s.shared}${s.shared ? `: ${s.sharedExamples}` : ""} |`,
+  ),
+  `| **All** | ${feeds.length} | ${total.trips} | ${total.stations} | ${mb(total.bytes)} | ${mb(total.gz)} | ${summary.reduce((n, s) => n + s.shared, 0)} |`,
   "",
   `Missing countries: ${Object.keys(COUNTRIES).filter((c) => !summary.some((s) => s.country === c)).map((c) => COUNTRIES[c]).join(", ") || "none"}.`,
   "",
