@@ -239,8 +239,15 @@ export async function readGtfs(dir: string, op: GtfsOperator, from: string, days
  * or the route's when the feed gives none (some feeds only name the line, others put the
  * train number there). v1 cuts the `narrow` families to the long-distance stations to
  * keep its stop pairs few; v2 keeps every stop, since a trip costs one entry per stop.
+ * `opts.v1: false` skips the rows.
  */
-export async function readGtfsTimetable(dir: string, op: GtfsOperator, from: string, days = 31): Promise<Timetable> {
+export async function readGtfsTimetable(
+  dir: string,
+  op: GtfsOperator,
+  from: string,
+  days = 31,
+  opts: { v1?: boolean } = {},
+): Promise<Timetable> {
   const agencies = new Map<string, string>();
   await readTable(dir, "agency", (r) => agencies.set(r.agency_id ?? "", r.agency_name ?? ""));
   const onlyAgency = agencies.size === 1 ? [...agencies.values()][0] ?? "" : "";
@@ -317,6 +324,8 @@ export async function readGtfsTimetable(dir: string, op: GtfsOperator, from: str
     const passes = op.passes(trip.family);
     const all = list.filter((c, i) => c.station && c.station !== list[i - 1]?.station);
     if (all.length >= 2) whole.push(tripOf(op.id, all, trip.runs, str(trip.trainNo), str(trip.family), passes));
+    // v1 costs a row per pair of stops: a feed of every regional train reads trips only.
+    if (opts.v1 === false) continue;
     const keep = op.narrow?.(trip.family) ? all.filter((c) => wide.has(c.station)) : all;
     pushStopPairs(out, str, op.id, keep, trip.runs, trip.trainNo, trip.family, passes);
   }

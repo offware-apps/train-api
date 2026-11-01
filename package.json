@@ -12,6 +12,7 @@
     "build:api": "tsx scripts/build-api.ts",
     "search": "tsx scripts/search.ts",
     "start": "tsx src/server.ts",
+    "probe:europe": "tsx scripts/probe-europe.ts",
     "check": "npm run typecheck && npm test"
   },
   "devDependencies": {

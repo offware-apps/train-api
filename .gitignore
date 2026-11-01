@@ -1,3 +1,5 @@
 node_modules/
 data/raw/
 public/
+data/probe/
+data/probe-raw/
